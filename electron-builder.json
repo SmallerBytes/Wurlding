@@ -33,6 +33,11 @@
     "uninstallerIcon": "build/app-icon.ico",
     "installerHeaderIcon": "build/app-icon.ico",
     "license": "build/eula.txt"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "SmallerBytes",
+    "repo": "Wurlding"
   }
 }
 

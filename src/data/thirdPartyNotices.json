@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-01T16:58:29.289Z",
+  "generatedAt": "2026-05-13T17:54:19.621Z",
   "directRuntime": [
     {
       "name": "@xyflow/react",
@@ -22,6 +22,12 @@
     {
       "name": "cors",
       "version": "2.8.6",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "electron-updater",
+      "version": "6.8.3",
       "license": "MIT",
       "dev": false
     },
@@ -312,6 +318,12 @@
       "dev": false
     },
     {
+      "name": "argparse",
+      "version": "2.0.1",
+      "license": "Python-2.0",
+      "dev": false
+    },
+    {
       "name": "async",
       "version": "3.2.6",
       "license": "MIT",
@@ -398,6 +410,12 @@
     {
       "name": "buffer-from",
       "version": "1.1.2",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "builder-util-runtime",
+      "version": "9.5.1",
       "license": "MIT",
       "dev": false
     },
@@ -626,6 +644,12 @@
     {
       "name": "ee-first",
       "version": "1.1.1",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "electron-updater",
+      "version": "6.8.3",
       "license": "MIT",
       "dev": false
     },
@@ -864,6 +888,24 @@
       "dev": false
     },
     {
+      "name": "js-yaml",
+      "version": "4.1.1",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "jsonfile",
+      "version": "6.2.1",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "lazy-val",
+      "version": "1.0.5",
+      "license": "MIT",
+      "dev": false
+    },
+    {
       "name": "lazystream",
       "version": "1.0.1",
       "license": "MIT",
@@ -872,6 +914,18 @@
     {
       "name": "lodash",
       "version": "4.17.23",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "lodash.escaperegexp",
+      "version": "4.1.2",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "lodash.isequal",
+      "version": "4.5.0",
       "license": "MIT",
       "dev": false
     },
@@ -1134,6 +1188,12 @@
       "dev": false
     },
     {
+      "name": "sax",
+      "version": "1.6.0",
+      "license": "BlueOak-1.0.0",
+      "dev": false
+    },
+    {
       "name": "scheduler",
       "version": "0.27.0",
       "license": "MIT",
@@ -1305,6 +1365,12 @@
       "name": "text-decoder",
       "version": "1.2.7",
       "license": "Apache-2.0",
+      "dev": false
+    },
+    {
+      "name": "tiny-typed-emitter",
+      "version": "2.1.0",
+      "license": "MIT",
       "dev": false
     },
     {
@@ -2198,12 +2264,6 @@
       "dev": true
     },
     {
-      "name": "argparse",
-      "version": "2.0.1",
-      "license": "Python-2.0",
-      "dev": true
-    },
-    {
       "name": "assert-plus",
       "version": "1.0.0",
       "license": "MIT",
@@ -2296,12 +2356,6 @@
     {
       "name": "builder-util",
       "version": "26.8.1",
-      "license": "MIT",
-      "dev": true
-    },
-    {
-      "name": "builder-util-runtime",
-      "version": "9.5.1",
       "license": "MIT",
       "dev": true
     },
@@ -3038,12 +3092,6 @@
       "dev": true
     },
     {
-      "name": "js-yaml",
-      "version": "4.1.1",
-      "license": "MIT",
-      "dev": true
-    },
-    {
       "name": "jsesc",
       "version": "3.1.0",
       "license": "MIT",
@@ -3094,12 +3142,6 @@
     {
       "name": "keyv",
       "version": "4.5.4",
-      "license": "MIT",
-      "dev": true
-    },
-    {
-      "name": "lazy-val",
-      "version": "1.0.5",
       "license": "MIT",
       "dev": true
     },
@@ -3641,12 +3683,6 @@
       "name": "sanitize-filename",
       "version": "1.6.4",
       "license": "WTFPL OR ISC",
-      "dev": true
-    },
-    {
-      "name": "sax",
-      "version": "1.6.0",
-      "license": "BlueOak-1.0.0",
       "dev": true
     },
     {
