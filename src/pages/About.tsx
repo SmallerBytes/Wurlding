@@ -83,29 +83,6 @@ export default function About() {
         </div>
 
         <div>
-          <h2 className="font-[Cinzel] text-lg font-semibold text-moonlight">Icon attribution</h2>
-          <p className="mt-2 text-sm text-mist leading-relaxed">
-            <a
-              href="https://icons8.com/icon/XbxzDQrmc06A/w-key"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-arcane hover:underline"
-            >
-              W Key
-            </a>{' '}
-            icon by{' '}
-            <a
-              href="https://icons8.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-arcane hover:underline"
-            >
-              Icons8
-            </a>
-          </p>
-        </div>
-
-        <div>
           <h2 className="font-[Cinzel] text-lg font-semibold text-moonlight">Copyright</h2>
           <p className="mt-2 text-sm text-mist leading-relaxed">{COPYRIGHT}</p>
         </div>
