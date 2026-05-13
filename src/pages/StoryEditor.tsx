@@ -5,6 +5,8 @@ import {
   ArrowDown,
   ArrowUp,
   BookMarked,
+  PanelLeft,
+  PanelLeftClose,
   Plus,
   Save,
   Trash2,
@@ -71,6 +73,8 @@ export default function StoryEditor() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [mode, setMode] = useState<EditorMode>('chapters');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
+  /** When false, the Details sidebar is hidden so the chapter area can use full width (lg+). */
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
   useEffect(() => {
     if (isNew) {
@@ -428,9 +432,32 @@ export default function StoryEditor() {
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
-        <aside className="card space-y-4 border-dusk/80 bg-abyss/90">
-          <h2 className="section-title mb-0 font-[Cinzel] text-lg">Details</h2>
+      <div
+        className={`grid gap-6 lg:items-start ${
+          detailsOpen
+            ? 'lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]'
+            : 'lg:grid-cols-1'
+        }`}
+      >
+        {detailsOpen && (
+        <aside
+          id="story-details-panel"
+          className="card space-y-4 border-dusk/80 bg-abyss/90"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="section-title mb-0 font-[Cinzel] text-lg">Details</h2>
+            <button
+              type="button"
+              className="btn-secondary shrink-0 p-2"
+              title="Hide details panel"
+              aria-expanded={detailsOpen}
+              aria-controls="story-details-panel"
+              onClick={() => setDetailsOpen(false)}
+            >
+              <PanelLeftClose className="h-4 w-4" aria-hidden />
+              <span className="sr-only">Hide details panel</span>
+            </button>
+          </div>
 
           <div>
             <label className="label" htmlFor="story-title">
@@ -522,8 +549,22 @@ export default function StoryEditor() {
             />
           </div>
         </aside>
+        )}
 
         <section className="flex min-h-[min(70vh,900px)] flex-col gap-4 rounded-lg border border-dusk/80 bg-shadow/30 p-4 sm:p-6">
+          {!detailsOpen && (
+            <div className="flex justify-end lg:justify-start">
+              <button
+                type="button"
+                className="btn-secondary inline-flex items-center gap-2 text-sm"
+                title="Show story details"
+                onClick={() => setDetailsOpen(true)}
+              >
+                <PanelLeft className="h-4 w-4 shrink-0" aria-hidden />
+                Story details
+              </button>
+            </div>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="section-title mb-0 font-[Cinzel] text-lg">
