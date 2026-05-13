@@ -107,7 +107,7 @@ export default function Events() {
   useEffect(() => {
     if (!selectedEventId) return;
     const el = document.getElementById(`event-card-${selectedEventId}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
   }, [selectedEventId]);
 
   const worldName = (worldId: string) =>
@@ -169,10 +169,14 @@ export default function Events() {
     };
     if (editingId) {
       updateEvent(editingId, payload);
-    } else if (insertAtIndex !== null) {
-      insertEventAt(form.worldId, insertAtIndex, payload);
     } else {
-      addEvent(payload);
+      const created =
+        insertAtIndex !== null
+          ? insertEventAt(form.worldId, insertAtIndex, payload)
+          : addEvent(payload);
+      if (activeWorldId && created.worldId === activeWorldId) {
+        setSelectedEventId(created.id);
+      }
     }
     closePanel();
   };

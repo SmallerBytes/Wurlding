@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import type { Event } from '../types';
 
@@ -51,6 +52,28 @@ export default function TimelineStrip({
   onAddAtSlot,
   onMove,
 }: Props) {
+  const stripScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!selectedId || events.length === 0) return;
+    if (!events.some((e) => e.id === selectedId)) return;
+    const node = document.getElementById(`timeline-node-${selectedId}`);
+    if (!node) return;
+    const container = stripScrollRef.current;
+    if (!container) return;
+
+    const cRect = container.getBoundingClientRect();
+    const nRect = node.getBoundingClientRect();
+    const nodeCenter = nRect.left + nRect.width / 2;
+    const viewCenter = cRect.left + cRect.width / 2;
+    const delta = nodeCenter - viewCenter;
+    const next = container.scrollLeft + delta;
+    container.scrollTo({
+      left: Math.max(0, Math.min(next, container.scrollWidth - container.clientWidth)),
+      behavior: 'smooth',
+    });
+  }, [selectedId, events]);
+
   if (events.length === 0) {
     return (
       <div className="card border border-dusk/70 bg-shadow/30 px-4 py-8 backdrop-blur-sm">
@@ -82,7 +105,7 @@ export default function TimelineStrip({
         Points are ordered along the line (earlier → later). Use + to add between events, or arrows to
         nudge position.
       </p>
-      <div className="overflow-x-auto pb-1">
+      <div ref={stripScrollRef} className="overflow-x-auto pb-1">
         <div className="flex min-w-min flex-row flex-nowrap items-end gap-0">
           <SegmentInsert
             onClick={() => onAddAtSlot(0)}
@@ -94,7 +117,11 @@ export default function TimelineStrip({
             const isSelected = selectedId === ev.id;
             const title = ev.name.trim() || 'Untitled event';
             return (
-              <div key={ev.id} className="flex min-w-0 items-end">
+              <div
+                key={ev.id}
+                id={`timeline-node-${ev.id}`}
+                className="flex min-w-0 items-end"
+              >
                 <div className="flex w-[7.5rem] shrink-0 flex-col items-center gap-1.5 px-0.5 sm:w-36">
                   <div className="flex items-center gap-0.5">
                     <button
