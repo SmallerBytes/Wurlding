@@ -4,8 +4,80 @@ const { pathToFileURL } = require('url');
 
 let serverStarted = false;
 
-/** True after user picks Help → Check for Updates (used for friendlier dialogs). */
+/** User opened Help → Check for Updates (controls “no update” dialog + progress UI). */
 let userRequestedUpdateCheck = false;
+/** True only for the current manual check — used to show download progress (not for silent startup checks). */
+let showProgressForCurrentDownload = false;
+
+let updaterHandlersInstalled = false;
+let autoUpdaterRef = null;
+
+/** Version string from the latest `update-available` (for progress window title). */
+let pendingDownloadVersion = '';
+
+let downloadProgressWindow = null;
+
+function closeDownloadProgressWindow() {
+  if (downloadProgressWindow && !downloadProgressWindow.isDestroyed()) {
+    downloadProgressWindow.close();
+  }
+  downloadProgressWindow = null;
+}
+
+function showDownloadProgressWindow(version) {
+  closeDownloadProgressWindow();
+
+  const safeVer = String(version || '?').replace(/[^0-9A-Za-z._-]/g, '') || '?';
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Downloading update</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, Segoe UI, sans-serif; background: #0a0a0f; color: #e8e6f3; padding: 16px 18px; }
+  h1 { font-size: 14px; font-weight: 600; margin: 0 0 4px; letter-spacing: 0.02em; }
+  p { margin: 0 0 14px; font-size: 12px; color: #9b95b3; }
+  .bar { height: 10px; border-radius: 6px; background: #1a1825; border: 1px solid #2a2538; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6b4dff, #9d7aff); border-radius: 5px; transition: width 0.15s ease-out; }
+  #pct { margin-top: 10px; font-size: 12px; tabular-nums; color: #c4bdd9; }
+</style></head>
+<body>
+  <h1>Downloading update</h1>
+  <p id="sub">Wurlding <span id="ver">${safeVer}</span></p>
+  <div class="bar"><div id="fill" class="fill"></div></div>
+  <div id="pct">0%</div>
+</body></html>`;
+
+  const w = new BrowserWindow({
+    width: 420,
+    height: 168,
+    show: false,
+    resizable: false,
+    minimizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    title: 'Downloading update',
+    backgroundColor: '#0a0a0f',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  w.once('ready-to-show', () => w.show());
+  downloadProgressWindow = w;
+}
+
+function setDownloadProgressPercent(percent) {
+  const p = Math.min(100, Math.max(0, Math.round(Number(percent) || 0)));
+  if (!downloadProgressWindow || downloadProgressWindow.isDestroyed()) return;
+  downloadProgressWindow.webContents
+    .executeJavaScript(
+      `document.getElementById('fill').style.width='${p}%';document.getElementById('pct').textContent='${p}%';`,
+    )
+    .catch(() => {});
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -50,6 +122,7 @@ async function startServer() {
 
 function setupAutoUpdater() {
   if (!app.isPackaged) return null;
+  if (updaterHandlersInstalled && autoUpdaterRef) return autoUpdaterRef;
 
   let autoUpdater;
   try {
@@ -60,34 +133,44 @@ function setupAutoUpdater() {
     return null;
   }
 
+  autoUpdaterRef = autoUpdater;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('error', (err) => {
     // eslint-disable-next-line no-console
     console.error('[WURLDING] updater error:', err);
+    closeDownloadProgressWindow();
     if (userRequestedUpdateCheck) {
       userRequestedUpdateCheck = false;
+      showProgressForCurrentDownload = false;
       dialog.showErrorBox('Update check failed', String(err?.message || err));
     }
   });
 
   autoUpdater.on('update-available', (info) => {
-    userRequestedUpdateCheck = false;
-    dialog
-      .showMessageBox({
-        type: 'info',
-        title: 'Update available',
-        message: `Wurlding ${info.version} is available.`,
-        detail: 'The update will download in the background. You will be asked to restart when it is ready to install.',
-        buttons: ['OK'],
-      })
-      .catch(() => {});
+    pendingDownloadVersion = String(info?.version || '');
+
+    // No modal here — it duplicated prompts when startup + manual checks overlapped.
+    // Manual checks get a progress window; silent background checks only prompt when ready to install.
+
+    if (showProgressForCurrentDownload) {
+      showDownloadProgressWindow(pendingDownloadVersion);
+    }
+  });
+
+  autoUpdater.on('download-progress', (p) => {
+    if (showProgressForCurrentDownload && !downloadProgressWindow) {
+      showDownloadProgressWindow(pendingDownloadVersion || app.getVersion());
+    }
+    setDownloadProgressPercent(p?.percent);
   });
 
   autoUpdater.on('update-not-available', () => {
+    closeDownloadProgressWindow();
     if (userRequestedUpdateCheck) {
       userRequestedUpdateCheck = false;
+      showProgressForCurrentDownload = false;
       dialog
         .showMessageBox({
           type: 'info',
@@ -100,6 +183,11 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    closeDownloadProgressWindow();
+    pendingDownloadVersion = '';
+    userRequestedUpdateCheck = false;
+    showProgressForCurrentDownload = false;
+
     dialog
       .showMessageBox({
         type: 'info',
@@ -118,8 +206,11 @@ function setupAutoUpdater() {
       .catch(() => {});
   });
 
-  // Quiet check a few seconds after launch (does not block startup).
+  updaterHandlersInstalled = true;
+
+  // Quiet background check — no modal on “available”; user gets one prompt when the download finishes.
   setTimeout(() => {
+    showProgressForCurrentDownload = false;
     autoUpdater.checkForUpdates().catch(() => {});
   }, 8000);
 
@@ -146,10 +237,14 @@ async function checkForUpdatesFromMenu() {
   }
 
   userRequestedUpdateCheck = true;
+  showProgressForCurrentDownload = true;
+
   try {
     await autoUpdater.checkForUpdates();
   } catch (e) {
     userRequestedUpdateCheck = false;
+    showProgressForCurrentDownload = false;
+    closeDownloadProgressWindow();
     await dialog.showErrorBox('Update check failed', String(e?.message || e));
   }
 }
