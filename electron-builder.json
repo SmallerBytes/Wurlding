@@ -1,0 +1,38 @@
+{
+  "appId": "com.wurlding.app",
+  "productName": "Wurlding",
+  "copyright": "Copyright © 2026 Michael A Hernandez",
+  "directories": {
+    "output": "release"
+  },
+  "icon": "build/app-icon.ico",
+  "files": [
+    "dist/**",
+    "server.js",
+    "electron/**",
+    "package.json"
+  ],
+  "extraResources": [],
+  "asar": true,
+  "win": {
+    "icon": "build/app-icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "build/app-icon.ico",
+    "uninstallerIcon": "build/app-icon.ico",
+    "installerHeaderIcon": "build/app-icon.ico",
+    "license": "build/eula.txt"
+  }
+}
+

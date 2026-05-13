@@ -1,0 +1,43 @@
+WURLDING - END USER LICENSE AGREEMENT (EULA)
+
+IMPORTANT: PLEASE READ THIS AGREEMENT CAREFULLY BEFORE INSTALLING OR USING THE SOFTWARE.
+
+By clicking "I Agree" (or otherwise installing, copying, or using the Software), you agree to be bound by this Agreement.
+If you do not agree to the terms of this Agreement, do not install or use the Software.
+
+1) Definitions
+"Software" means the Wurlding application and all accompanying files, data, and materials provided with it.
+"You" means the individual or legal entity installing or using the Software.
+
+2) License Grant
+Subject to your compliance with this Agreement, the author grants you a non-exclusive, non-transferable license to install and use the Software for your personal or internal use.
+
+3) Restrictions
+You may not:
+- reverse engineer, decompile, or disassemble the Software except to the extent permitted by applicable law;
+- redistribute, resell, rent, lease, sublicense, or otherwise transfer the Software to third parties unless you have written permission from the author;
+- remove or alter copyright, trademark, or other proprietary notices.
+
+4) Ownership
+The Software is licensed, not sold. The author retains all rights, title, and interest in and to the Software.
+
+5) No Warranty
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+6) Limitation of Liability
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL THE AUTHOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES (INCLUDING, WITHOUT LIMITATION, LOSS OF DATA, LOSS OF PROFITS, OR BUSINESS INTERRUPTION) ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS AGREEMENT, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+7) Responsibility for Content
+You are responsible for any content you create, import, store, or distribute using the Software.
+
+8) Termination
+This Agreement is effective until terminated. It terminates automatically if you fail to comply with its terms. Upon termination, you must stop using the Software and remove it from your devices.
+
+9) Governing Law
+This Agreement is governed by the laws applicable in your jurisdiction, without regard to conflict of laws principles.
+
+10) Contact
+Author: Michael A Hernandez
+
+Last updated: 2026-05-01
+
