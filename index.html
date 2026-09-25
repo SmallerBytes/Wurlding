@@ -8,6 +8,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <title>Wurlding - World Builder</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('wurlding:theme');
+          if (t !== 'light' && t !== 'dark') t = 'light';
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.style.colorScheme = t;
+          var m = localStorage.getItem('wurlding:motion');
+          if (m !== 'on' && m !== 'off') {
+            m = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'off' : 'on';
+          }
+          document.documentElement.setAttribute('data-motion', m);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

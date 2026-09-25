@@ -84,7 +84,7 @@ function createDefaultDraft(worldId: string): Omit<Character, 'id' | 'createdAt'
 
 type Draft = Omit<Character, 'id' | 'createdAt' | 'updatedAt'>;
 
-type Tab = 'character' | 'dnd';
+type Tab = 'character' | 'stats';
 
 export default function CharacterSheet() {
   const { id } = useParams<{ id: string }>();
@@ -238,13 +238,13 @@ export default function CharacterSheet() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('dnd')}
+          onClick={() => setActiveTab('stats')}
           className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-all ${
-            activeTab === 'dnd' ? 'tab-active' : 'tab-inactive'
+            activeTab === 'stats' ? 'tab-active' : 'tab-inactive'
           }`}
         >
           <Swords size={16} />
-          D&D 5e Sheet
+          Game stats
         </button>
       </div>
 
@@ -464,13 +464,13 @@ export default function CharacterSheet() {
         </div>
       )}
 
-      {/* ========== D&D 5e SHEET TAB ========== */}
-      {activeTab === 'dnd' && (
+      {/* ========== GAME STATS TAB ========== */}
+      {activeTab === 'stats' && (
         <div className="space-y-8">
           <div className="card border-dusk/60 bg-shadow/40 p-4">
             <p className="text-sm text-mist flex items-center gap-2">
               <Swords size={14} className="text-ember" />
-              Optional game mechanics — fill these in if you want to use this character in a D&D 5e campaign.
+              Optional game mechanics — use these if you want numbers for tabletop play.
             </p>
           </div>
 
@@ -482,25 +482,25 @@ export default function CharacterSheet() {
             </h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label className="label" htmlFor="dnd-class">Class</label>
-                <select id="dnd-class" className="select" value={draft.class} onChange={(e) => patch({ class: e.target.value })}>
+                <label className="label" htmlFor="stats-class">Class</label>
+                <select id="stats-class" className="select" value={draft.class} onChange={(e) => patch({ class: e.target.value })}>
                   {CHARACTER_CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="dnd-level">Level</label>
-                <input id="dnd-level" type="number" className="input tabular-nums" value={draft.level}
+                <label className="label" htmlFor="stats-level">Level</label>
+                <input id="stats-level" type="number" className="input tabular-nums" value={draft.level}
                   onChange={(e) => patch({ level: Math.max(1, Number(e.target.value) || 1) })} min={1} max={20} />
               </div>
               <div>
-                <label className="label" htmlFor="dnd-bg">Background</label>
-                <select id="dnd-bg" className="select" value={draft.background} onChange={(e) => patch({ background: e.target.value })}>
+                <label className="label" htmlFor="stats-bg">Background</label>
+                <select id="stats-bg" className="select" value={draft.background} onChange={(e) => patch({ background: e.target.value })}>
                   {DND_BACKGROUNDS.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="dnd-xp">Experience Points</label>
-                <input id="dnd-xp" type="number" className="input tabular-nums" value={draft.experiencePoints}
+                <label className="label" htmlFor="stats-xp">Experience Points</label>
+                <input id="stats-xp" type="number" className="input tabular-nums" value={draft.experiencePoints}
                   onChange={(e) => patch({ experiencePoints: Number(e.target.value) || 0 })} min={0} />
               </div>
             </div>

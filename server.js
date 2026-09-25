@@ -723,7 +723,7 @@ app.post('/api/import/world/commit', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`[WURLDING] Data server running on http://localhost:${PORT}`);
   console.log(`[WURLDING] Data file: ${DATA_FILE}`);
   console.log(`[WURLDING] Images:    ${IMAGES_DIR}`);
@@ -736,3 +736,17 @@ app.listen(PORT, () => {
     console.log(`[WURLDING] No existing data found — starting fresh`);
   }
 });
+
+let dataServerClosed = false;
+
+/** Called from Electron before running the NSIS installer so the local API port is free. */
+export function closeDataServer() {
+  if (dataServerClosed) return Promise.resolve();
+  dataServerClosed = true;
+  return new Promise((resolve, reject) => {
+    httpServer.close((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}

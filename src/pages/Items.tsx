@@ -361,18 +361,30 @@ export default function Items() {
           </div>
         </section>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="wz-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((item) => (
             <article
               key={item.id}
-              className="card-hover group relative flex flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
+              role="button"
+              tabIndex={0}
+              onClick={() => openEdit(item)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openEdit(item);
+                }
+              }}
+              className="card-hover group relative flex cursor-pointer flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
             >
-              <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition group-hover:opacity-100">
+              <div className="absolute right-2 top-2 z-10 flex gap-1">
                 <button
                   type="button"
                   className="rounded-lg p-2 text-silver hover:bg-dusk hover:text-moonlight"
                   aria-label={`Edit ${item.name}`}
-                  onClick={() => openEdit(item)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(item);
+                  }}
                 >
                   <Pencil size={18} />
                 </button>
@@ -380,7 +392,10 @@ export default function Items() {
                   type="button"
                   className="rounded-lg p-2 text-blood/80 hover:bg-blood/10 hover:text-blood"
                   aria-label={`Delete ${item.name}`}
-                  onClick={() => handleDelete(item)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(item);
+                  }}
                 >
                   <Trash2 size={18} />
                 </button>

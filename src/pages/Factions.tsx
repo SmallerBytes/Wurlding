@@ -310,18 +310,30 @@ export default function Factions() {
           </div>
         </section>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="wz-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((f) => (
             <article
               key={f.id}
-              className="card-hover group relative flex flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
+              role="button"
+              tabIndex={0}
+              onClick={() => openEdit(f)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openEdit(f);
+                }
+              }}
+              className="card-hover group relative flex cursor-pointer flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
             >
-              <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition group-hover:opacity-100">
+              <div className="absolute right-2 top-2 z-10 flex gap-1">
                 <button
                   type="button"
                   className="rounded-lg p-2 text-silver hover:bg-dusk hover:text-moonlight"
                   aria-label={`Edit ${f.name}`}
-                  onClick={() => openEdit(f)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(f);
+                  }}
                 >
                   <Pencil size={18} />
                 </button>
@@ -329,7 +341,10 @@ export default function Factions() {
                   type="button"
                   className="rounded-lg p-2 text-blood/80 hover:bg-blood/10 hover:text-blood"
                   aria-label={`Delete ${f.name}`}
-                  onClick={() => handleDelete(f)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(f);
+                  }}
                 >
                   <Trash2 size={18} />
                 </button>

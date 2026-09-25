@@ -369,17 +369,27 @@ export default function Locations() {
           </div>
         </section>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="wz-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((loc) => (
             <article
               key={loc.id}
-              className="card-hover group relative flex flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
+              role="button"
+              tabIndex={0}
+              onClick={() => openEdit(loc)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openEdit(loc);
+                }
+              }}
+              className="card-hover group relative flex cursor-pointer flex-col gap-3 border-dusk/80 bg-shadow/40 p-5 backdrop-blur-sm"
             >
               {loc.imageUrl && (
                 <button
                   type="button"
                   className="group/image relative mb-3 -mx-5 -mt-5 overflow-hidden rounded-t-lg text-left"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setPreviewUrl(loc.imageUrl);
                     setPreviewAlt(loc.name || 'Location');
                   }}
@@ -405,12 +415,15 @@ export default function Locations() {
                   <h2 className="font-[Cinzel] text-xl font-semibold text-moonlight">
                     {loc.name || 'Unnamed place'}
                   </h2>
-                  <div className="flex gap-1 opacity-0 transition group-hover:opacity-100">
+                  <div className="flex gap-1">
                     <button
                       type="button"
                       className="rounded-lg p-2 text-silver hover:bg-dusk hover:text-moonlight"
                       aria-label={`Edit ${loc.name}`}
-                      onClick={() => openEdit(loc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(loc);
+                      }}
                     >
                       <Pencil size={18} />
                     </button>
@@ -418,7 +431,10 @@ export default function Locations() {
                       type="button"
                       className="rounded-lg p-2 text-blood/80 hover:bg-blood/10 hover:text-blood"
                       aria-label={`Delete ${loc.name}`}
-                      onClick={() => handleDelete(loc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(loc);
+                      }}
                     >
                       <Trash2 size={18} />
                     </button>

@@ -438,7 +438,7 @@ export default function Events() {
             >
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-mystic/10 via-transparent to-transparent" />
               <div className="relative mx-auto max-w-md">
-                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-mystic/30 bg-mystic/10">
+                <div className="wz-float mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-mystic/30 bg-mystic/10">
                   <CalendarClock className="h-8 w-8 text-mystic" aria-hidden />
                 </div>
                 <h2 className="mb-3 font-[Cinzel] text-2xl font-semibold text-moonlight">
@@ -469,7 +469,7 @@ export default function Events() {
                   </>
                 )}
               </p>
-              <ul className="space-y-0" aria-label="Timeline">
+              <ul className="wz-stagger space-y-0" aria-label="Timeline">
                 {filtered.map((ev, index) => {
                   const isLast = index === filtered.length - 1;
                   return (
@@ -490,18 +490,35 @@ export default function Events() {
 
                       <div
                         id={`event-card-${ev.id}`}
-                        className={`card-hover group relative min-w-0 flex-1 border bg-shadow/40 px-4 py-4 pr-14 backdrop-blur-sm md:px-5 md:py-5 ${
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setSelectedEventId(ev.id);
+                          openEdit(ev);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedEventId(ev.id);
+                            openEdit(ev);
+                          }
+                        }}
+                        className={`card-hover group relative min-w-0 flex-1 cursor-pointer border bg-shadow/40 px-4 py-4 pr-14 backdrop-blur-sm md:px-5 md:py-5 ${
                           selectedEventId === ev.id && activeWorldId
                             ? 'border-mystic/50 ring-1 ring-mystic/30'
                             : 'border-dusk/80'
                         }`}
                       >
-                        <div className="absolute right-2 top-3 z-10 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                        <div className="absolute right-2 top-3 z-10 flex gap-1">
                           <button
                             type="button"
                             className="rounded-lg p-2 text-silver hover:bg-dusk hover:text-moonlight"
                             aria-label={`Edit ${ev.name}`}
-                            onClick={() => openEdit(ev)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEventId(ev.id);
+                              openEdit(ev);
+                            }}
                           >
                             <Pencil size={18} />
                           </button>
@@ -509,7 +526,10 @@ export default function Events() {
                             type="button"
                             className="rounded-lg p-2 text-blood/80 hover:bg-blood/10 hover:text-blood"
                             aria-label={`Delete ${ev.name}`}
-                            onClick={() => handleDelete(ev)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(ev);
+                            }}
                           >
                             <Trash2 size={18} />
                           </button>

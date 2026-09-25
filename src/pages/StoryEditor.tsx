@@ -5,11 +5,14 @@ import {
   ArrowDown,
   ArrowUp,
   BookMarked,
+  Maximize2,
+  Minimize2,
   PanelLeft,
   PanelLeftClose,
   Plus,
   Save,
   Trash2,
+  X,
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import ImageUpload from '../components/ImageUpload';
@@ -75,6 +78,8 @@ export default function StoryEditor() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
   /** When false, the Details sidebar is hidden so the chapter area can use full width (lg+). */
   const [detailsOpen, setDetailsOpen] = useState(true);
+  /** Full-page chapter writing — hides chrome so the page is mostly the manuscript. */
+  const [focusWrite, setFocusWrite] = useState(false);
 
   useEffect(() => {
     if (isNew) {
@@ -152,6 +157,24 @@ export default function StoryEditor() {
     const t = window.setTimeout(() => setSaveStatus('idle'), 1200);
     return () => window.clearTimeout(t);
   }, [saveStatus]);
+
+  useEffect(() => {
+    if (!focusWrite) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFocusWrite(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusWrite]);
+
+  useEffect(() => {
+    if (!focusWrite) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [focusWrite]);
 
   const sortedChapters = useMemo(
     () => [...chapters].sort((a, b) => a.order - b.order),
@@ -390,6 +413,73 @@ export default function StoryEditor() {
 
   return (
     <div className="relative min-h-full">
+      {focusWrite && activeChapter && (
+        <div
+          className="wz-modal-backdrop fixed inset-0 z-50 flex flex-col bg-void"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Focus writing"
+        >
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-dusk/70 bg-abyss/95 px-4 py-3 sm:px-6">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-mist font-[Cinzel]">
+                Writing
+              </p>
+              <h2 className="truncate font-[Cinzel] text-lg text-moonlight sm:text-xl">
+                {activeChapter.title.trim() || 'Untitled chapter'}
+              </h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={saveStatus === 'saved' ? 'btn-secondary wz-saved-pop' : 'btn-primary'}
+                onClick={handleSaveStory}
+                disabled={worlds.length === 0}
+              >
+                <Save size={18} />
+                {saveStatus === 'saved' ? 'Saved' : 'Save story'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setFocusWrite(false)}
+                title="Exit focus writing (Esc)"
+              >
+                <Minimize2 size={18} />
+                Exit focus
+              </button>
+              <button
+                type="button"
+                className="btn-secondary p-2"
+                onClick={() => setFocusWrite(false)}
+                aria-label="Close focus writing"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+          <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-3 px-4 py-4 sm:px-8 sm:py-6">
+            <label className="sr-only" htmlFor="chapter-content-focus">
+              Chapter content
+            </label>
+            <textarea
+              id="chapter-content-focus"
+              className="focus-write-textarea textarea min-h-0 flex-1 resize-none border-dusk/60 bg-shadow/50 p-5 font-[inherit] text-base leading-relaxed text-moonlight sm:text-[1.05rem] sm:leading-[1.75]"
+              value={activeChapter.content}
+              onChange={(e) =>
+                persistChapterPatch(activeChapter.id, {
+                  content: e.target.value,
+                })
+              }
+              placeholder="Write freely—the page remembers."
+              spellCheck
+              autoFocus
+            />
+            <p className="text-center text-xs text-mist">Press Esc to leave focus writing</p>
+          </div>
+        </div>
+      )}
+
       <div
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl"
         aria-hidden
@@ -422,7 +512,7 @@ export default function StoryEditor() {
           </button>
           <button
             type="button"
-            className={saveStatus === 'saved' ? 'btn-secondary' : 'btn-primary'}
+            className={saveStatus === 'saved' ? 'btn-secondary wz-saved-pop' : 'btn-primary'}
             onClick={handleSaveStory}
             disabled={worlds.length === 0}
           >
@@ -551,7 +641,7 @@ export default function StoryEditor() {
         </aside>
         )}
 
-        <section className="flex min-h-[min(70vh,900px)] flex-col gap-4 rounded-lg border border-dusk/80 bg-shadow/30 p-4 sm:p-6">
+        <section className="flex min-h-[min(80vh,960px)] flex-col gap-4 rounded-lg border border-dusk/80 bg-shadow/30 p-4 sm:p-6">
           {!detailsOpen && (
             <div className="flex justify-end lg:justify-start">
               <button
@@ -701,19 +791,30 @@ export default function StoryEditor() {
                     </button>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col">
-                    <label className="label" htmlFor="chapter-content">
-                      Content
-                    </label>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="label mb-0" htmlFor="chapter-content">
+                        Content
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-secondary px-2.5 py-1.5 text-xs sm:text-sm"
+                        onClick={() => setFocusWrite(true)}
+                        title="Write on a full page"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+                        Expand writing
+                      </button>
+                    </div>
                     <textarea
                       id="chapter-content"
-                      className="textarea min-h-[400px] flex-1 font-[inherit] leading-relaxed text-moonlight"
+                      className="chapter-write textarea min-h-[min(55vh,640px)] flex-1 resize-y font-[inherit] leading-relaxed text-moonlight"
                       value={activeChapter.content}
                       onChange={(e) =>
                         persistChapterPatch(activeChapter.id, {
                           content: e.target.value,
                         })
                       }
-                      placeholder="Write freely—the page remembers."
+                      placeholder="Write freely—the page remembers. Use Expand writing for a full-page view."
                       spellCheck
                     />
                   </div>

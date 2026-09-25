@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import AmbientMotes from './AmbientMotes';
 import {
   Globe, BookOpen, Users, Sword, Bug, Network, GitBranch,
-  ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info,
+  ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings,
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { APP_VERSION } from '../constants/appMeta';
@@ -46,9 +47,11 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { worlds, activeWorldId, setActiveWorld } = useStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const activeWorld = worlds.find(w => w.id === activeWorldId);
-  const [showWhatsNew, setShowWhatsNew] = useState(false);
-
+  /** Map Creator manages its own viewport; skip the page-enter animation there so the canvas never blurs. */
+  const pageKey = location.pathname;
+  const animatePage = !location.pathname.startsWith('/map');
   const entriesToShow = useMemo(() => {
     const lastSeen = localStorage.getItem(WHATS_NEW_SEEN_KEY) || '';
     // Show notes for versions newer than lastSeen; fallback to the latest entry.
@@ -58,14 +61,11 @@ export default function Layout() {
     return [];
   }, []);
 
-  useEffect(() => {
-    if (entriesToShow.length > 0) {
-      setShowWhatsNew(true);
-    }
-  }, [entriesToShow.length]);
+  const [showWhatsNew, setShowWhatsNew] = useState(() => entriesToShow.length > 0);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="relative flex h-screen overflow-hidden">
+      <AmbientMotes />
       {showWhatsNew && (
         <WhatsNewModal
           entries={entriesToShow}
@@ -92,7 +92,7 @@ export default function Layout() {
       >
         <div className={`flex items-center gap-3 p-4 border-b border-dusk ${collapsed ? 'justify-center' : ''}`}>
           {!collapsed && (
-            <h1 className="text-xl font-bold text-moonlight font-[Cinzel] tracking-widest">
+            <h1 className="wz-wordmark text-xl font-bold text-moonlight font-[Cinzel] tracking-widest">
               WURLDING
             </h1>
           )}
@@ -129,7 +129,7 @@ export default function Layout() {
               to={to}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
+                `wz-nav-link flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
                   collapsed ? 'justify-center' : ''
                 } ${
                   isActive
@@ -143,10 +143,26 @@ export default function Layout() {
             </NavLink>
           ))}
           <NavLink
+            to="/settings"
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) =>
+              `wz-nav-link flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
+                collapsed ? 'justify-center' : ''
+              } ${
+                isActive
+                  ? 'bg-arcane/15 text-arcane border border-arcane/20'
+                  : 'text-mist hover:text-moonlight hover:bg-shadow'
+              }`
+            }
+          >
+            <Settings size={20} />
+            {!collapsed && <span className="text-sm font-medium">Settings</span>}
+          </NavLink>
+          <NavLink
             to="/about"
             onClick={() => setMobileOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
+              `wz-nav-link flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
                 collapsed ? 'justify-center' : ''
               } ${
                 isActive
@@ -200,8 +216,10 @@ export default function Layout() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <Outlet />
+        <div className="relative z-[1] flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+          <div key={pageKey} className={animatePage ? 'wz-page min-h-full' : 'min-h-full'}>
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>

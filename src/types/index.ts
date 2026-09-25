@@ -221,11 +221,26 @@ export const FAMILY_RELATION_LABELS: Record<FamilyRelationType, string> = {
 };
 
 export type MapElementType =
+  | 'pin' | 'label' | 'zone' | 'trail'
   | 'region' | 'forest' | 'mountain' | 'ocean' | 'lake' | 'desert' | 'swamp' | 'plains' | 'tundra'
   | 'city' | 'town' | 'village'
   | 'castle' | 'ruins' | 'temple' | 'cave' | 'dungeon'
   | 'river' | 'road' | 'bridge'
   | 'civilization' | 'landmark';
+
+export type MapLineStyle = 'solid' | 'dashed' | 'dotted';
+export type MapPathStyle = 'straight' | 'curve';
+
+/** An image (uploaded or built-in preset) drawn underneath all map elements, centered on the origin. */
+export interface MapBackgroundImage {
+  url: string;
+  /** Size in world units (usually the image’s natural pixel size, capped for very large files). */
+  width: number;
+  height: number;
+  opacity: number;
+  /** Set when the image is one of the bundled presets so it can be re-resolved after updates. */
+  presetId?: string;
+}
 
 export interface MapLayer {
   id: string;
@@ -236,8 +251,11 @@ export interface MapLayer {
   order: number;
 }
 
-/** How the element’s footprint is drawn on the map (markers use a subset visually). */
-export type MapBoundaryShape = 'rect' | 'circle' | 'triangle' | 'polygon';
+/**
+ * How the element’s footprint is drawn on the map (markers use a subset visually).
+ * `path` is an open line (trails, rivers, roads) using `boundaryPoints`. Trails default to a curve.
+ */
+export type MapBoundaryShape = 'rect' | 'circle' | 'triangle' | 'polygon' | 'path';
 
 export interface MapElement {
   id: string;
@@ -252,10 +270,22 @@ export interface MapElement {
   opacity: number;
   notes: string;
   locationId: string;
-  /** Default `rect` (legacy). `polygon` uses `boundaryPoints` relative to center (x, y). */
+  /** Default `rect` (legacy). `polygon`/`path` use `boundaryPoints` relative to center (x, y). */
   boundaryShape?: MapBoundaryShape;
-  /** Vertices relative to element center; only when `boundaryShape === 'polygon'`. */
+  /** Vertices relative to element center; only when `boundaryShape` is `polygon` or `path`. */
   boundaryPoints?: { dx: number; dy: number }[];
+  /** Line thickness for `path` elements (world units). */
+  strokeWidth?: number;
+  /** Dash pattern for `path` elements. */
+  lineStyle?: MapLineStyle;
+  /** How a path is drawn. Trails default to `curve`. */
+  pathStyle?: MapPathStyle;
+  /** Text size for `label` elements (world units). */
+  fontSize?: number;
+  /** Icon key for `pin` markers (see PIN_ICON_OPTIONS). */
+  pinIcon?: string;
+  /** Style key for zones (forest, mountain, …) — sets the default icon and colour. */
+  zoneKind?: string;
 }
 
 export interface WorldMap {
@@ -266,6 +296,8 @@ export interface WorldMap {
   layers: MapLayer[];
   activeLayerId: string;
   backgroundColor: string;
+  /** Optional uploaded/preset map image drawn beneath elements. */
+  backgroundImage?: MapBackgroundImage | null;
   gridEnabled: boolean;
   gridSize: number;
   createdAt: string;
@@ -315,7 +347,7 @@ export interface Creature {
 export interface FieldGuideEntry {
   id: string;
   worldId: string;
-  /** Optional reference to an existing creature (SRD/myth/custom). */
+  /** Optional reference to an existing creature (myth/custom). */
   creatureId?: string;
   imageUrl: string;
   name: string;
@@ -336,7 +368,6 @@ export interface FieldGuideEntry {
 }
 
 export type CreatureSource =
-  | 'srd'
   | 'mythology-greek'
   | 'mythology-norse'
   | 'mythology-celtic'
@@ -362,7 +393,7 @@ export const DND_CLASSES = [
   'Artificer', 'Blood Hunter', 'Custom'
 ];
 
-/** Narrative / world-building roles (not tied to D&D mechanics). */
+/** Narrative / world-building roles (not tied to a specific game system). */
 export const NARRATIVE_ROLES = [
   'Adventurer', 'Artisan', 'Assassin', 'Bandit', 'Bounty Hunter', 'Captain',
   'Commoner', 'Courtesan', 'Criminal', 'Diplomat', 'Explorer', 'Farmer',
@@ -372,7 +403,7 @@ export const NARRATIVE_ROLES = [
   'Thief', 'Traveler', 'Warrior',
 ] as const;
 
-/** Full class dropdown: D&D classes first, then story roles, then Custom. */
+/** Full class dropdown: common adventuring classes first, then story roles, then Custom. */
 export const CHARACTER_CLASS_OPTIONS = [
   ...DND_CLASSES.filter((c) => c !== 'Custom'),
   ...NARRATIVE_ROLES,

@@ -13,7 +13,7 @@ export default function WhatsNewModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+      className="wz-modal-backdrop fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="What’s new"
@@ -21,7 +21,7 @@ export default function WhatsNewModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="card relative w-full max-w-2xl border-arcane/25 bg-abyss/95 p-6 backdrop-blur-sm">
+      <div className="wz-modal card relative w-full max-w-2xl border-arcane/25 bg-abyss/95 p-6 backdrop-blur-sm">
         <button
           type="button"
           className="absolute right-3 top-3 rounded-full border border-dusk bg-shadow/60 p-2 text-moonlight hover:bg-shadow"

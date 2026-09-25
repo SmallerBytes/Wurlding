@@ -30,7 +30,7 @@ function SegmentInsert({
       : 'from-dusk/70 via-dusk/50 to-dusk/70';
 
   return (
-    <div className="flex min-w-[2.75rem] flex-1 items-center">
+    <div className="flex w-16 shrink-0 items-center sm:w-20">
       <div className={`h-[2px] flex-1 rounded-full bg-gradient-to-r ${leftGrad}`} />
       <button
         type="button"
@@ -106,7 +106,7 @@ export default function TimelineStrip({
         nudge position.
       </p>
       <div ref={stripScrollRef} className="overflow-x-auto pb-1">
-        <div className="flex min-w-min flex-row flex-nowrap items-end gap-0">
+        <div className="mx-auto flex w-max max-w-none flex-row flex-nowrap items-end justify-center gap-0">
           <SegmentInsert
             onClick={() => onAddAtSlot(0)}
             label="Add event at start of timeline"
@@ -138,8 +138,8 @@ export default function TimelineStrip({
                       onClick={() => onSelect(ev.id)}
                       className={`h-4 w-4 shrink-0 rounded-full border-2 transition ${
                         isSelected
-                          ? 'border-mystic bg-mystic/30 shadow-[0_0_14px_rgba(167,139,250,0.45)]'
-                          : 'border-arcane/70 bg-abyss shadow-[0_0_10px_rgba(139,92,246,0.28)] hover:border-mystic/80'
+                          ? 'wz-glow-pulse border-mystic bg-mystic/30 shadow-[0_0_14px_rgba(167,139,250,0.45)]'
+                          : 'border-arcane/70 bg-abyss shadow-[0_0_10px_rgba(139,92,246,0.28)] hover:border-mystic/80 hover:scale-125'
                       }`}
                       aria-label={`Select “${title}”`}
                       aria-pressed={isSelected}

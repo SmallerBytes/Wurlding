@@ -6,11 +6,17 @@ import {
   MousePointer2, Plus, Trash2, X, ZoomIn, ZoomOut, Grid3x3, RotateCcw,
   Mountain, TreePine, Waves, Sun, Snowflake, Home, Shield, Star,
   Eye, EyeOff, Lock, Unlock, MapPin, Crown, Skull, Circle, Leaf, Droplets, Building2,
-  ChevronUp, ChevronDown, Layers,
+  ChevronUp, ChevronDown, Layers, Image as ImageIcon, Upload, Route, Tag, Hexagon,
+  Maximize, Loader2, Sword, Flag, Tent, Anchor, Gem, Flame, Cross, Compass,
+  Castle, Footprints, Landmark, Trees, Pickaxe, ScrollText, Swords,
 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import useStore from '../store/useStore';
-import type { MapBoundaryShape, MapElement, MapElementType, MapLayer, WorldMap } from '../types';
+import { API_BASE } from '../api';
+import { MAP_PRESETS, findMapPreset } from '../data/mapPresets';
+import type {
+  MapBackgroundImage, MapBoundaryShape, MapElement, MapElementType, MapLayer, MapLineStyle, MapPathStyle, WorldMap,
+} from '../types';
 import type { LucideIcon } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -23,11 +29,19 @@ interface ElementConfig {
   width: number;
   height: number;
   icon: LucideIcon;
-  category: 'terrain' | 'settlement' | 'structure' | 'feature';
-  style: 'area' | 'marker';
+  category: 'annotation' | 'terrain' | 'settlement' | 'structure' | 'feature';
+  /**
+   * `area` = filled footprint, `marker` = icon badge, `path` = open line drawn point by point,
+   * `label` = free-floating text.
+   */
+  style: 'area' | 'marker' | 'path' | 'label';
 }
 
 const ELEMENT_CONFIGS: Record<MapElementType, ElementConfig> = {
+  pin:          { label: 'Pin',          color: '#e11d48', width: 32,  height: 32,  icon: MapPin,    category: 'annotation', style: 'marker' },
+  label:        { label: 'Label',        color: '#fef3c7', width: 120, height: 24,  icon: Tag,       category: 'annotation', style: 'label' },
+  zone:         { label: 'Zone',         color: '#f59e0b', width: 200, height: 150, icon: Hexagon,   category: 'annotation', style: 'area' },
+  trail:        { label: 'Trail / Path', color: '#fbbf24', width: 6,   height: 6,   icon: Route,     category: 'annotation', style: 'path' },
   region:       { label: 'Region',       color: '#4a5c8a', width: 220, height: 160, icon: MapPin,    category: 'terrain',    style: 'area' },
   forest:       { label: 'Forest',       color: '#1a5c32', width: 140, height: 110, icon: TreePine,  category: 'terrain',    style: 'area' },
   mountain:     { label: 'Mountain',     color: '#6b7280', width: 130, height: 100, icon: Mountain,  category: 'terrain',    style: 'area' },
@@ -46,33 +60,144 @@ const ELEMENT_CONFIGS: Record<MapElementType, ElementConfig> = {
   temple:       { label: 'Temple',       color: '#d4a537', width: 36,  height: 36,  icon: Star,      category: 'structure',  style: 'marker' },
   cave:         { label: 'Cave',         color: '#44403c', width: 30,  height: 30,  icon: Eye,       category: 'structure',  style: 'marker' },
   dungeon:      { label: 'Dungeon',      color: '#5c2d2d', width: 34,  height: 34,  icon: Skull,     category: 'structure',  style: 'marker' },
-  river:        { label: 'River',        color: '#3b82f6', width: 18,  height: 200, icon: Waves,     category: 'feature',    style: 'area' },
-  road:         { label: 'Road',         color: '#78553a', width: 200, height: 12,  icon: MapPin,    category: 'feature',    style: 'area' },
+  river:        { label: 'River',        color: '#3b82f6', width: 10,  height: 10,  icon: Waves,     category: 'feature',    style: 'path' },
+  road:         { label: 'Road',         color: '#a16207', width: 7,   height: 7,   icon: Route,     category: 'feature',    style: 'path' },
   bridge:       { label: 'Bridge',       color: '#8b7e6a', width: 40,  height: 16,  icon: MapPin,    category: 'feature',    style: 'area' },
   landmark:     { label: 'Landmark',     color: '#f59e0b', width: 28,  height: 28,  icon: Star,      category: 'feature',    style: 'marker' },
 };
 
-const CATEGORIES: { key: string; label: string; types: MapElementType[] }[] = [
-  { key: 'terrain', label: 'Terrain', types: ['region', 'forest', 'mountain', 'plains', 'desert', 'tundra', 'swamp', 'ocean', 'lake', 'civilization'] },
-  { key: 'settlement', label: 'Settlements', types: ['city', 'town', 'village'] },
-  { key: 'structure', label: 'Structures', types: ['castle', 'temple', 'ruins', 'cave', 'dungeon'] },
-  { key: 'feature', label: 'Features', types: ['river', 'road', 'bridge', 'landmark'] },
+const QUICK_TOOLS: MapElementType[] = ['pin', 'label', 'zone', 'trail'];
+
+const ZONE_KIND_OPTIONS: { id: string; label: string; color: string; icon: LucideIcon }[] = [
+  { id: 'zone',          label: 'Zone',         color: '#f59e0b', icon: Hexagon },
+  { id: 'region',        label: 'Region',       color: '#4a5c8a', icon: MapPin },
+  { id: 'forest',        label: 'Forest',       color: '#1a5c32', icon: TreePine },
+  { id: 'mountain',      label: 'Mountain',     color: '#6b7280', icon: Mountain },
+  { id: 'plains',        label: 'Plains',       color: '#4a7c59', icon: Leaf },
+  { id: 'desert',        label: 'Desert',       color: '#92703a', icon: Sun },
+  { id: 'tundra',        label: 'Tundra',       color: '#6b8fa3', icon: Snowflake },
+  { id: 'swamp',         label: 'Swamp',        color: '#2d4a2d', icon: Leaf },
+  { id: 'ocean',         label: 'Ocean',        color: '#1e3a5f', icon: Waves },
+  { id: 'lake',          label: 'Lake',         color: '#2563eb', icon: Droplets },
+  { id: 'civilization',  label: 'Civilization', color: '#7c3aed', icon: Crown },
 ];
+
+const AREA_TYPES = new Set<MapElementType>(
+  (Object.keys(ELEMENT_CONFIGS) as MapElementType[]).filter((t) => ELEMENT_CONFIGS[t].style === 'area'),
+);
+
+function zoneKindOf(el: MapElement): string {
+  if (el.zoneKind) return el.zoneKind;
+  if (ZONE_KIND_OPTIONS.some((o) => o.id === el.type)) return el.type;
+  return 'zone';
+}
+
+function zoneKindOption(id: string | undefined) {
+  return ZONE_KIND_OPTIONS.find((o) => o.id === id) ?? ZONE_KIND_OPTIONS[0]!;
+}
+
+function isZoneLike(el: MapElement): boolean {
+  return AREA_TYPES.has(el.type);
+}
+
+const PIN_ICON_OPTIONS: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: 'pin', label: 'Pin', icon: MapPin },
+  { id: 'star', label: 'Star', icon: Star },
+  { id: 'flag', label: 'Flag', icon: Flag },
+  { id: 'sword', label: 'Sword', icon: Sword },
+  { id: 'swords', label: 'Battle', icon: Swords },
+  { id: 'shield', label: 'Shield', icon: Shield },
+  { id: 'crown', label: 'Crown', icon: Crown },
+  { id: 'castle', label: 'Castle', icon: Castle },
+  { id: 'home', label: 'Home', icon: Home },
+  { id: 'building', label: 'City', icon: Building2 },
+  { id: 'tent', label: 'Camp', icon: Tent },
+  { id: 'skull', label: 'Danger', icon: Skull },
+  { id: 'cross', label: 'Shrine', icon: Cross },
+  { id: 'flame', label: 'Fire', icon: Flame },
+  { id: 'gem', label: 'Treasure', icon: Gem },
+  { id: 'anchor', label: 'Port', icon: Anchor },
+  { id: 'compass', label: 'Compass', icon: Compass },
+  { id: 'landmark', label: 'Landmark', icon: Landmark },
+  { id: 'trees', label: 'Forest', icon: Trees },
+  { id: 'mountain', label: 'Peak', icon: Mountain },
+  { id: 'waves', label: 'Water', icon: Waves },
+  { id: 'pickaxe', label: 'Mine', icon: Pickaxe },
+  { id: 'scroll', label: 'Lore', icon: ScrollText },
+  { id: 'footprints', label: 'Trail', icon: Footprints },
+];
+
+function pinIconFor(id: string | undefined): LucideIcon {
+  return PIN_ICON_OPTIONS.find((o) => o.id === id)?.icon ?? MapPin;
+}
 
 /** Markers cannot use freehand polygon as a one-click place; map to rect/circle/triangle only. */
 function effectiveBoundaryForPlacement(cfg: ElementConfig, chosen: MapBoundaryShape): MapBoundaryShape {
+  if (cfg.style === 'label') return 'rect';
+  if (cfg.style === 'path') return 'path';
   if (cfg.style === 'marker') {
     if (chosen === 'circle' || chosen === 'triangle') return chosen;
     return 'rect';
   }
-  if (chosen === 'polygon') return 'rect';
+  if (chosen === 'polygon' || chosen === 'path') return 'rect';
   return chosen;
+}
+
+/** Whether a tool places by drawing a sequence of points (custom polygon or any path). */
+function toolDrawsPoints(tool: MapElementType | null, boundary: MapBoundaryShape): boolean {
+  if (!tool) return false;
+  const cfg = ELEMENT_CONFIGS[tool];
+  if (cfg.style === 'path') return true;
+  return cfg.style === 'area' && boundary === 'polygon';
+}
+
+function isPathElement(el: MapElement): boolean {
+  return el.boundaryShape === 'path' && !!el.boundaryPoints && el.boundaryPoints.length >= 2;
+}
+
+function dashArrayFor(style: MapLineStyle | undefined, sw: number): string | undefined {
+  if (style === 'dashed') return `${sw * 3} ${sw * 2}`;
+  if (style === 'dotted') return `${Math.max(1, sw * 0.1)} ${sw * 1.8}`;
+  return undefined;
+}
+
+function pathUsesCurve(el: MapElement): boolean {
+  if (el.pathStyle === 'straight') return false;
+  if (el.pathStyle === 'curve') return true;
+  return el.type === 'trail';
+}
+
+/** Catmull–Rom spline through the points, converted to cubic Bézier for SVG. */
+function pointsToSmoothPath(points: { x: number; y: number }[], ox: number, oy: number): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0]!.x - ox} ${points[0]!.y - oy}`;
+  if (points.length === 2) {
+    return `M ${points[0]!.x - ox} ${points[0]!.y - oy} L ${points[1]!.x - ox} ${points[1]!.y - oy}`;
+  }
+  const tension = 6;
+  let d = `M ${points[0]!.x - ox} ${points[0]!.y - oy}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? 0 : i - 1]!;
+    const p1 = points[i]!;
+    const p2 = points[i + 1]!;
+    const p3 = points[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / tension;
+    const c1y = p1.y + (p2.y - p0.y) / tension;
+    const c2x = p2.x - (p3.x - p1.x) / tension;
+    const c2y = p2.y - (p3.y - p1.y) / tension;
+    d += ` C ${c1x - ox} ${c1y - oy}, ${c2x - ox} ${c2y - oy}, ${p2.x - ox} ${p2.y - oy}`;
+  }
+  return d;
 }
 
 const ZOOM_MIN = 0.15;
 const ZOOM_MAX = 4;
 const GRID_WORLD_SIZE = 10000;
 const MIN_ELEMENT_SIZE = 10;
+/** Very large uploads are scaled down to this many world units on their longest side. */
+const MAX_BACKGROUND_DIM = 3200;
+const DEFAULT_STROKE_WIDTH = 6;
+const DEFAULT_LABEL_FONT_SIZE = 20;
 
 const RESIZE_HANDLES: { id: string; hx: number; hy: number; cursor: string }[] = [
   { id: 'nw', hx: -1, hy: -1, cursor: 'nwse-resize' },
@@ -104,6 +229,35 @@ function dist2(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** Area-weighted centroid so zone titles sit in the visual middle, not the bounding-box center. */
+function polygonCentroid(pts: { x: number; y: number }[]): { x: number; y: number } {
+  if (pts.length === 0) return { x: 0, y: 0 };
+  if (pts.length < 3) {
+    return {
+      x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+      y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+    };
+  }
+  let area2 = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    const cross = a.x * b.y - b.x * a.y;
+    area2 += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+  if (Math.abs(area2) < 1e-6) {
+    return {
+      x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+      y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+    };
+  }
+  return { x: cx / (3 * area2), y: cy / (3 * area2) };
+}
+
 /** Thin a freehand stroke so we do not store hundreds of points per drag. */
 function simplifyFreehandStroke(
   points: { x: number; y: number }[],
@@ -127,9 +281,11 @@ function simplifyFreehandStroke(
 function PolygonDraftOverlay({
   clickPoints,
   freehandLive,
+  curved,
 }: {
   clickPoints: { x: number; y: number }[];
   freehandLive: { x: number; y: number }[];
+  curved?: boolean;
 }) {
   const hasClick = clickPoints.length > 0;
   const hasLive = freehandLive.length > 0;
@@ -148,6 +304,8 @@ function PolygonDraftOverlay({
 
   const clickPoly = clickPoints.map((p) => `${p.x - minX},${p.y - minY}`).join(' ');
   const livePoly = freehandLive.map((p) => `${p.x - minX},${p.y - minY}`).join(' ');
+  const clickD = curved ? pointsToSmoothPath(clickPoints, minX, minY) : '';
+  const liveD = curved ? pointsToSmoothPath(freehandLive, minX, minY) : '';
   const showVertexDots = clickPoints.length > 0 && clickPoints.length <= 80;
 
   return (
@@ -157,7 +315,16 @@ function PolygonDraftOverlay({
     >
       <svg width={w} height={h} className="overflow-visible">
         {/* Freehand stroke in progress — solid line so you see the path while dragging */}
-        {freehandLive.length >= 2 && (
+        {freehandLive.length >= 2 && (curved ? (
+          <path
+            d={liveD}
+            fill="none"
+            stroke="rgba(196,181,253,0.98)"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
           <polyline
             points={livePoly}
             fill="none"
@@ -166,7 +333,7 @@ function PolygonDraftOverlay({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-        )}
+        ))}
         {freehandLive.length >= 1 && (
           <circle
             cx={freehandLive[0]!.x - minX}
@@ -178,7 +345,15 @@ function PolygonDraftOverlay({
           />
         )}
         {/* Point-to-point draft */}
-        {clickPoints.length >= 2 && (
+        {clickPoints.length >= 2 && (curved ? (
+          <path
+            d={clickD}
+            fill="none"
+            stroke="rgba(167,139,250,0.95)"
+            strokeWidth={2}
+            strokeDasharray="4 3"
+          />
+        ) : (
           <polyline
             points={clickPoly}
             fill="none"
@@ -186,7 +361,7 @@ function PolygonDraftOverlay({
             strokeWidth={2}
             strokeDasharray="4 3"
           />
-        )}
+        ))}
         {showVertexDots &&
           clickPoints.map((p, i) => (
             <circle
@@ -226,11 +401,118 @@ function MapElementNode({
   layerOpacity: number;
   onMouseDown: (e: React.MouseEvent) => void;
 }) {
-  const Icon = config.icon;
+  const Icon = el.type === 'pin'
+    ? pinIconFor(el.pinIcon)
+    : isZoneLike(el)
+      ? zoneKindOption(zoneKindOf(el)).icon
+      : config.icon;
   const isArea = config.style === 'area';
   const w = el.width;
   const h = el.height;
   const bShape: MapBoundaryShape = el.boundaryShape ?? 'rect';
+
+  if (isPathElement(el)) {
+    const sw = Math.max(1, el.strokeWidth ?? DEFAULT_STROKE_WIDTH);
+    const abs = el.boundaryPoints!.map((p) => ({ x: el.x + p.dx, y: el.y + p.dy }));
+    const pad = sw * 2 + 12;
+    const minX = Math.min(...abs.map((p) => p.x)) - pad;
+    const maxX = Math.max(...abs.map((p) => p.x)) + pad;
+    const minY = Math.min(...abs.map((p) => p.y)) - pad;
+    const maxY = Math.max(...abs.map((p) => p.y)) + pad;
+    const pw = Math.max(maxX - minX, 1);
+    const ph = Math.max(maxY - minY, 1);
+    const pts = abs.map((p) => `${p.x - minX},${p.y - minY}`).join(' ');
+    const curved = pathUsesCurve(el);
+    const d = curved ? pointsToSmoothPath(abs, minX, minY) : '';
+    const mid = abs[Math.floor(abs.length / 2)]!;
+    const dash = dashArrayFor(el.lineStyle ?? (el.type === 'trail' ? 'dashed' : 'solid'), sw);
+    const common = {
+      fill: 'none' as const,
+      strokeLinecap: 'round' as const,
+      strokeLinejoin: 'round' as const,
+    };
+    return (
+      <div
+        className="absolute select-none"
+        style={{
+          left: minX,
+          top: minY,
+          width: pw,
+          height: ph,
+          zIndex: 5,
+          opacity: layerOpacity,
+          pointerEvents: 'none',
+        }}
+      >
+        <svg width={pw} height={ph} className="overflow-visible">
+          {selected && (curved ? (
+            <path d={d} {...common} stroke="rgba(139,92,246,0.55)" strokeWidth={sw + 8} />
+          ) : (
+            <polyline points={pts} {...common} stroke="rgba(139,92,246,0.55)" strokeWidth={sw + 8} />
+          ))}
+          {curved ? (
+            <>
+              <path d={d} {...common} stroke="rgba(0,0,0,0.45)" strokeWidth={sw + 2.5} strokeOpacity={el.opacity} />
+              <path d={d} {...common} stroke={el.color} strokeWidth={sw} strokeOpacity={el.opacity} strokeDasharray={dash} />
+              <path
+                d={d}
+                {...common}
+                stroke="transparent"
+                strokeWidth={Math.max(sw + 12, 18)}
+                style={{ pointerEvents: locked ? 'none' : 'stroke', cursor: locked ? 'default' : 'move' }}
+                onMouseDown={onMouseDown}
+              />
+            </>
+          ) : (
+            <>
+              <polyline points={pts} {...common} stroke="rgba(0,0,0,0.45)" strokeWidth={sw + 2.5} strokeOpacity={el.opacity} />
+              <polyline points={pts} {...common} stroke={el.color} strokeWidth={sw} strokeOpacity={el.opacity} strokeDasharray={dash} />
+              <polyline
+                points={pts}
+                {...common}
+                stroke="transparent"
+                strokeWidth={Math.max(sw + 12, 18)}
+                style={{ pointerEvents: locked ? 'none' : 'stroke', cursor: locked ? 'default' : 'move' }}
+                onMouseDown={onMouseDown}
+              />
+            </>
+          )}
+        </svg>
+        {el.name && (
+          <span
+            className="absolute -translate-x-1/2 whitespace-nowrap font-[Cinzel] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] pointer-events-none"
+            style={{ left: mid.x - minX, top: mid.y - minY - sw - 16, fontSize: clamp(sw * 2, 10, 14) }}
+          >
+            {el.name}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (config.style === 'label') {
+    const fs = Math.max(6, el.fontSize ?? DEFAULT_LABEL_FONT_SIZE);
+    return (
+      <div
+        className={`absolute select-none -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded px-1.5 py-0.5 font-[Cinzel] font-semibold tracking-wide transition-shadow ${
+          locked ? 'cursor-default' : 'cursor-move'
+        } ${selected ? 'shadow-[0_0_0_2px_rgba(139,92,246,0.7)]' : ''}`}
+        style={{
+          left: el.x,
+          top: el.y,
+          zIndex: 12,
+          opacity: layerOpacity * el.opacity,
+          color: el.color,
+          fontSize: fs,
+          textShadow: '0 1px 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.7)',
+          pointerEvents: locked ? 'none' : 'auto',
+        }}
+        onMouseDown={onMouseDown}
+      >
+        {el.name || 'Label'}
+      </div>
+    );
+  }
 
   if (isArea && bShape === 'polygon' && el.boundaryPoints && el.boundaryPoints.length >= 3) {
     const abs = el.boundaryPoints.map((p) => ({ x: el.x + p.dx, y: el.y + p.dy }));
@@ -241,6 +523,7 @@ function MapElementNode({
     const pw = Math.max(maxX - minX, 1);
     const ph = Math.max(maxY - minY, 1);
     const pts = abs.map((p) => `${p.x - minX},${p.y - minY}`).join(' ');
+    const mid = polygonCentroid(abs);
     return (
       <div
         className="absolute select-none"
@@ -268,8 +551,13 @@ function MapElementNode({
         </svg>
         {el.name && (
           <span
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center font-[Cinzel] font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] pointer-events-none px-1"
-            style={{ fontSize: clamp(Math.min(pw, ph) * 0.08, 9, 14), maxWidth: pw }}
+            className="absolute -translate-x-1/2 -translate-y-1/2 text-center font-[Cinzel] font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] pointer-events-none px-1"
+            style={{
+              left: mid.x - minX,
+              top: mid.y - minY,
+              fontSize: clamp(Math.min(pw, ph) * 0.1, 11, 18),
+              maxWidth: pw * 0.8,
+            }}
           >
             {el.name}
           </span>
@@ -304,23 +592,35 @@ function MapElementNode({
     >
       {isArea ? (
         <div
-          className={`w-full h-full border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-shadow ${
+          className={`relative w-full h-full border-2 border-dashed transition-shadow ${
             bShape === 'circle' ? 'rounded-full' : bShape === 'triangle' ? '' : 'rounded-lg'
           } ${locked ? 'cursor-default' : 'cursor-move'} ${selected ? 'shadow-[0_0_0_3px_rgba(139,92,246,0.6)]' : ''}`}
           style={areaShapeStyle()}
         >
-          <Icon size={Math.min(w, h) * 0.2} className="opacity-60" style={{ color: '#fff' }} />
+          <Icon
+            size={Math.min(w, h) * 0.16}
+            className="absolute left-1/2 -translate-x-1/2 opacity-35 pointer-events-none"
+            style={{
+              color: '#fff',
+              top: bShape === 'triangle' ? '58%' : '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
           {el.name && (
             <span
-              className="text-white font-[Cinzel] font-semibold text-center leading-tight px-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
-              style={{ fontSize: clamp(Math.min(w, h) * 0.1, 9, 16) }}
+              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 text-white font-[Cinzel] font-semibold text-center leading-tight px-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] pointer-events-none"
+              style={{
+                top: bShape === 'triangle' ? '66%' : '50%',
+                fontSize: clamp(Math.min(w, h) * 0.1, 11, 18),
+                maxWidth: '90%',
+              }}
             >
               {el.name}
             </span>
           )}
         </div>
       ) : (
-        <div className={`relative flex flex-col items-center ${locked ? 'cursor-default' : 'cursor-move'}`} style={{ width: w, height: w + 18 }}>
+        <div className={`wz-pin-drop relative flex flex-col items-center ${locked ? 'cursor-default' : 'cursor-move'}`} style={{ width: w, height: w + 18 }}>
           <div
             className={`flex items-center justify-center border-2 shadow-lg transition-shadow ${markerShapeClass(bShape)} ${
               selected ? 'shadow-[0_0_0_3px_rgba(139,92,246,0.6)]' : 'shadow-[0_2px_8px_rgba(0,0,0,0.5)]'
@@ -379,6 +679,11 @@ export default function MapCreator() {
   const [renameValue, setRenameValue] = useState('');
   const [renderTick, setRenderTick] = useState(0);
   const liveOverrideRef = useRef<Record<string, Partial<MapElement>>>({});
+  const [bgUploading, setBgUploading] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  /** User closed the “start your map” chooser on an empty map. */
+  const [starterDismissed, setStarterDismissed] = useState(false);
+  const bgFileRef = useRef<HTMLInputElement>(null);
 
   const _cached = activeWorldId ? _viewCache.get(activeWorldId) : null;
   const panRef = useRef(_cached?.pan ?? { x: 0, y: 0 });
@@ -456,12 +761,24 @@ export default function MapCreator() {
   }, [elements, layers, visibleLayerIds]);
 
   const isPolygonDrawMode = useMemo(
-    () =>
-      !!tool &&
-      ELEMENT_CONFIGS[tool].style === 'area' &&
-      placementBoundaryShape === 'polygon',
+    () => toolDrawsPoints(tool, placementBoundaryShape),
     [tool, placementBoundaryShape],
   );
+  const toolStyle = tool ? ELEMENT_CONFIGS[tool].style : null;
+  const isPathTool = toolStyle === 'path';
+  const draftMinPoints = isPathTool ? 2 : 3;
+
+  /** Resolve the stored background; presets re-resolve their URL so hashed asset names survive updates. */
+  const background: MapBackgroundImage | null = useMemo(() => {
+    const bg = currentMap?.backgroundImage;
+    if (!bg?.url) return null;
+    const preset = findMapPreset(bg.presetId);
+    return preset ? { ...bg, url: preset.url } : bg;
+  }, [currentMap?.backgroundImage]);
+
+  const backgroundKey = background
+    ? `${background.presetId ?? ''}|${background.url}|${background.width}x${background.height}`
+    : '';
 
   const worldLocations = useMemo(
     () => (activeWorldId ? locations.filter((l) => l.worldId === activeWorldId) : []),
@@ -497,14 +814,24 @@ export default function MapCreator() {
     }
   }, [activeWorldId, currentMap, addMap]);
 
-  /* Centre the view once (first visit only — no cached view yet). */
+  /* Centre the view once (first visit only — no cached view yet). Frames the map image if there is one. */
   useLayoutEffect(() => {
     if (didInit.current || !canvasRef.current || !currentMap) return;
     didInit.current = true;
     const rect = canvasRef.current.getBoundingClientRect();
+    const bg = currentMap.backgroundImage;
+    if (bg) {
+      const margin = 0.92;
+      zoomRef.current = clamp(
+        Math.min((rect.width * margin) / bg.width, (rect.height * margin) / bg.height),
+        ZOOM_MIN,
+        ZOOM_MAX,
+      );
+    } else {
+      zoomRef.current = 1;
+    }
     panRef.current = { x: rect.width / 2, y: rect.height / 2 };
-    zoomRef.current = 1;
-    if (activeWorldId) _viewCache.set(activeWorldId, { pan: panRef.current, zoom: 1 });
+    if (activeWorldId) _viewCache.set(activeWorldId, { pan: panRef.current, zoom: zoomRef.current });
     kick();
   }, [currentMap, activeWorldId, kick]);
 
@@ -531,6 +858,12 @@ export default function MapCreator() {
         locationId: el.locationId,
         layerId: el.layerId,
         boundaryShape: el.boundaryShape ?? 'rect',
+        strokeWidth: el.strokeWidth,
+        lineStyle: el.lineStyle,
+        pathStyle: el.pathStyle,
+        fontSize: el.fontSize,
+        pinIcon: el.pinIcon,
+        zoneKind: el.zoneKind,
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -539,6 +872,126 @@ export default function MapCreator() {
   const commitElements = useCallback(
     (next: MapElement[]) => {
       if (currentMap) updateMap(currentMap.id, { elements: next });
+    },
+    [currentMap, updateMap],
+  );
+
+  /* ---- Background image (uploaded or preset) ---- */
+  const fitToRect = useCallback(
+    (w: number, h: number) => {
+      if (!canvasRef.current || !(w > 0) || !(h > 0)) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
+      const margin = 0.92;
+      const z = clamp(Math.min((rect.width * margin) / w, (rect.height * margin) / h), ZOOM_MIN, ZOOM_MAX);
+      zoomRef.current = z;
+      panRef.current = { x: rect.width / 2, y: rect.height / 2 };
+      if (activeWorldId) _viewCache.set(activeWorldId, { pan: panRef.current, zoom: z });
+      kick();
+    },
+    [activeWorldId, kick],
+  );
+
+  const fitToBackground = useCallback(() => {
+    if (background) fitToRect(background.width, background.height);
+  }, [background, fitToRect]);
+
+  /** Whenever a map image is set or replaced, frame it in the viewport so pins land on the art. */
+  useLayoutEffect(() => {
+    if (!background) return;
+    const id = window.requestAnimationFrame(() => {
+      fitToRect(background.width, background.height);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [backgroundKey, background, fitToRect]);
+
+  const setBackgroundFromUrl = useCallback(
+    (url: string, presetId?: string) => {
+      if (!currentMap) return;
+      setBgError(null);
+      const mapId = currentMap.id;
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        let w = img.naturalWidth || 1600;
+        let h = img.naturalHeight || 1200;
+        if (!(w > 0) || !(h > 0)) {
+          w = 1600;
+          h = 1200;
+        }
+        const longest = Math.max(w, h);
+        if (longest > MAX_BACKGROUND_DIM) {
+          const k = MAX_BACKGROUND_DIM / longest;
+          w = Math.round(w * k);
+          h = Math.round(h * k);
+        }
+        const preset = findMapPreset(presetId);
+        const patch: Partial<WorldMap> = {
+          backgroundImage: {
+            url,
+            width: w,
+            height: h,
+            opacity: 1,
+            ...(presetId ? { presetId } : {}),
+          },
+          // Clear the grid so the parchment is readable; user can turn Grid back on.
+          gridEnabled: false,
+        };
+        if (preset) patch.backgroundColor = preset.backgroundColor;
+        updateMap(mapId, patch);
+        setStarterDismissed(true);
+        window.requestAnimationFrame(() => fitToRect(w, h));
+      };
+      img.onerror = () =>
+        setBgError('Could not load that image. Try another file, or pick a built-in map again.');
+      img.src = url;
+    },
+    [currentMap, updateMap, fitToRect],
+  );
+
+  const handleBackgroundFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith('image/')) {
+        setBgError('Please choose an image file (PNG, JPG, WEBP…).');
+        return;
+      }
+      setBgError(null);
+      setBgUploading(true);
+      try {
+        const form = new FormData();
+        form.append('image', file);
+        const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: form });
+        const json = await res.json();
+        if (json.ok && json.url) {
+          // Prefer filename + API_BASE so Electron (localhost:3001) and Vite proxy both work.
+          const url =
+            typeof json.filename === 'string' && json.filename
+              ? `${API_BASE || 'http://localhost:3001'}/api/images/${json.filename}`
+              : String(json.url);
+          setBackgroundFromUrl(url);
+        } else {
+          setBgError(json.error || 'Upload failed');
+        }
+      } catch {
+        setBgError('Data server not reachable — is Wurlding fully started?');
+      } finally {
+        setBgUploading(false);
+      }
+    },
+    [setBackgroundFromUrl],
+  );
+
+  const removeBackground = useCallback(() => {
+    if (!currentMap) return;
+    updateMap(currentMap.id, { backgroundImage: null });
+  }, [currentMap, updateMap]);
+
+  const setBackgroundOpacity = useCallback(
+    (opacity: number) => {
+      if (!currentMap?.backgroundImage) return;
+      updateMap(currentMap.id, {
+        backgroundImage: { ...currentMap.backgroundImage, opacity },
+      });
     },
     [currentMap, updateMap],
   );
@@ -629,7 +1082,7 @@ export default function MapCreator() {
         id: nanoid(),
         type,
         layerId: activeLayerId,
-        name: cfg.label,
+        name: cfg.style === 'label' ? 'New label' : cfg.label,
         x: wx,
         y: wy,
         width: cfg.width,
@@ -640,9 +1093,13 @@ export default function MapCreator() {
         locationId: '',
         boundaryShape,
         boundaryPoints: undefined,
+        fontSize: cfg.style === 'label' ? DEFAULT_LABEL_FONT_SIZE : undefined,
+        pinIcon: type === 'pin' ? 'pin' : undefined,
+        zoneKind: type === 'zone' ? 'zone' : undefined,
       };
       commitElements([...elements, el]);
       setSelectedId(el.id);
+      setStarterDismissed(true);
       setTool(null);
       setPolygonDraft([]);
       setFreehandStroke([]);
@@ -653,9 +1110,11 @@ export default function MapCreator() {
   );
 
   const commitPolygonPlacement = useCallback(() => {
-    if (!currentMap || !tool || polygonDraft.length < 3) return;
+    if (!currentMap || !tool) return;
     const cfg = ELEMENT_CONFIGS[tool];
-    if (cfg.style !== 'area') return;
+    const isPath = cfg.style === 'path';
+    if (!isPath && cfg.style !== 'area') return;
+    if (polygonDraft.length < (isPath ? 2 : 3)) return;
     const pts = polygonDraft;
     const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
     const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
@@ -674,14 +1133,19 @@ export default function MapCreator() {
       width: bw,
       height: bh,
       color: cfg.color,
-      opacity: 0.45,
+      opacity: isPath ? 0.95 : 0.45,
       notes: '',
       locationId: '',
-      boundaryShape: 'polygon',
+      boundaryShape: isPath ? 'path' : 'polygon',
       boundaryPoints: rel,
+      strokeWidth: isPath ? Math.max(2, cfg.width) : undefined,
+      lineStyle: isPath ? (tool === 'trail' ? 'dashed' : 'solid') : undefined,
+      pathStyle: isPath ? (tool === 'trail' ? 'curve' : 'straight') : undefined,
+      zoneKind: !isPath && tool === 'zone' ? 'zone' : undefined,
     };
     commitElements([...elements, el]);
     setSelectedId(el.id);
+    setStarterDismissed(true);
     setPolygonDraft([]);
     setFreehandStroke([]);
     freehandStrokeRef.current = [];
@@ -718,9 +1182,8 @@ export default function MapCreator() {
     const sy = e.clientY - rect.top;
 
     if (tool) {
-      const cfg = ELEMENT_CONFIGS[tool];
       const world = screenToWorld(sx, sy, pan, zoom);
-      if (cfg.style === 'area' && placementBoundaryShape === 'polygon') {
+      if (isPolygonDrawMode) {
         if (polygonDrawStyle === 'freehand') {
           isFreehandDrawingRef.current = true;
           freehandStrokeRef.current = [world];
@@ -848,6 +1311,8 @@ export default function MapCreator() {
               name: el.name, color: el.color, width: el.width, height: el.height,
               opacity: el.opacity, notes: el.notes, locationId: el.locationId, layerId: el.layerId,
               boundaryShape: el.boundaryShape ?? 'rect',
+              strokeWidth: el.strokeWidth, lineStyle: el.lineStyle, pathStyle: el.pathStyle,
+              fontSize: el.fontSize, pinIcon: el.pinIcon, zoneKind: el.zoneKind,
             });
           }
         }
@@ -895,10 +1360,9 @@ export default function MapCreator() {
     if (!el) return;
     if (lockedLayerIds.has(el.layerId)) return;
     if (tool) {
-      const cfg = ELEMENT_CONFIGS[tool];
       const rect = canvasRef.current!.getBoundingClientRect();
       const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, pan, zoom);
-      if (cfg.style === 'area' && placementBoundaryShape === 'polygon') {
+      if (isPolygonDrawMode) {
         if (polygonDrawStyle === 'freehand') {
           isFreehandDrawingRef.current = true;
           freehandStrokeRef.current = [world];
@@ -945,8 +1409,8 @@ export default function MapCreator() {
       if (
         e.key === 'Enter' &&
         tool &&
-        placementBoundaryShape === 'polygon' &&
-        polygonDraft.length >= 3
+        isPolygonDrawMode &&
+        polygonDraft.length >= draftMinPoints
       ) {
         const tag = (e.target as HTMLElement).tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -961,19 +1425,26 @@ export default function MapCreator() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedId, deleteElement, tool, placementBoundaryShape, polygonDraft, commitPolygonPlacement]);
+  }, [selectedId, deleteElement, tool, isPolygonDrawMode, draftMinPoints, polygonDraft, commitPolygonPlacement]);
 
   /* ---- Property panel helpers ---- */
   const applyProp = (patch: Partial<MapElement>) => {
     let next: Partial<MapElement> = { ...patch };
-    if (next.boundaryShape && next.boundaryShape !== 'polygon') {
+    if (next.boundaryShape && next.boundaryShape !== 'polygon' && next.boundaryShape !== 'path') {
       next = { ...next, boundaryPoints: undefined };
     }
     setPropForm((f) => ({ ...f, ...next }));
     if (selectedId) updateElement(selectedId, next);
   };
 
+  const selectedStyle = selectedElement ? ELEMENT_CONFIGS[selectedElement.type]?.style : null;
+  const selectedIsPath = !!selectedElement && isPathElement(selectedElement);
+
   const resetView = () => {
+    if (background) {
+      fitToBackground();
+      return;
+    }
     if (canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       setPan({ x: rect.width / 2, y: rect.height / 2 });
@@ -996,7 +1467,7 @@ export default function MapCreator() {
   if (!activeWorldId) {
     return (
       <div className="card border-dashed border-dusk/80 bg-shadow/40 p-12 text-center">
-        <MapPin className="mx-auto mb-4 h-12 w-12 text-mist/40" />
+        <MapPin className="wz-float mx-auto mb-4 h-12 w-12 text-mist/40" />
         <h2 className="mb-2 font-[Cinzel] text-xl font-semibold text-moonlight">Select a world</h2>
         <p className="text-mist">Choose a world from the sidebar to open its map.</p>
       </div>
@@ -1032,10 +1503,143 @@ export default function MapCreator() {
             Select / Pan
           </button>
 
+          {/* Quick annotation tools */}
+          <div className="px-1">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-mist/70">Quick add</p>
+            <div className="grid grid-cols-4 gap-1">
+              {QUICK_TOOLS.map((t) => {
+                const cfg = ELEMENT_CONFIGS[t];
+                const Icon = cfg.icon;
+                const active = tool === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    title={cfg.label}
+                    onClick={() => {
+                      setTool(t);
+                      setPolygonDraft([]);
+                      setFreehandStroke([]);
+                      freehandStrokeRef.current = [];
+                      isFreehandDrawingRef.current = false;
+                      if (cfg.style === 'marker' && placementBoundaryShape === 'polygon') setPlacementBoundaryShape('rect');
+                      if (t === 'zone') setPlacementBoundaryShape('polygon');
+                    }}
+                    className={`flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[9px] font-medium transition ${
+                      active
+                        ? 'border-arcane/40 bg-arcane/20 text-arcane'
+                        : 'border-dusk/60 text-mist hover:border-dusk hover:bg-shadow hover:text-moonlight'
+                    }`}
+                  >
+                    <Icon size={14} style={{ color: active ? undefined : cfg.color }} />
+                    {t === 'trail' ? 'Trail' : cfg.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Map image */}
+          <div className="px-1">
+            <p className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-mist/70">
+              <ImageIcon size={11} /> Map image
+            </p>
+            <input
+              ref={bgFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleBackgroundFile(f);
+                e.target.value = '';
+              }}
+            />
+            {background ? (
+              <div className="space-y-1.5 rounded-lg border border-dusk/70 bg-shadow/40 p-1.5">
+                <div
+                  className="h-16 w-full overflow-hidden rounded border border-dusk/60 bg-void"
+                  style={{ backgroundImage: `url(${background.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                  aria-hidden
+                />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-wider text-mist/70">Fade</span>
+                  <input
+                    type="range"
+                    min={0.15}
+                    max={1}
+                    step={0.05}
+                    className="flex-1 accent-arcane"
+                    value={background.opacity}
+                    onChange={(e) => setBackgroundOpacity(parseFloat(e.target.value))}
+                    title={`Image opacity ${Math.round(background.opacity * 100)}%`}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <button type="button" className="btn-secondary justify-center p-1.5 text-[10px]" onClick={fitToBackground} title="Fit map to view">
+                    <Maximize size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary justify-center p-1.5 text-[10px]"
+                    onClick={() => bgFileRef.current?.click()}
+                    title="Replace with your own image"
+                    disabled={bgUploading}
+                  >
+                    {bgUploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary justify-center p-1.5 text-[10px] text-blood hover:text-blood"
+                    onClick={removeBackground}
+                    title="Remove map image (pins and zones stay)"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn-secondary w-full justify-center py-1.5 text-[11px]"
+                onClick={() => bgFileRef.current?.click()}
+                disabled={bgUploading}
+              >
+                {bgUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                Upload your map
+              </button>
+            )}
+            <div className="mt-1.5 grid grid-cols-1 gap-1">
+              {MAP_PRESETS.map((p) => {
+                const active = background?.presetId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    title={`${p.name} — ${p.description}`}
+                    onClick={() => setBackgroundFromUrl(p.url, p.id)}
+                    className={`flex items-center gap-1.5 overflow-hidden rounded-md border p-0.5 text-left transition ${
+                      active ? 'border-arcane/60 ring-1 ring-arcane/40' : 'border-dusk/60 hover:border-arcane/40'
+                    }`}
+                  >
+                    <div
+                      className="h-8 w-12 flex-shrink-0 rounded-sm bg-void"
+                      style={{ backgroundImage: `url(${p.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                      aria-hidden
+                    />
+                    <span className="block truncate text-[10px] text-silver">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {bgError && <p className="mt-1 text-[10px] text-blood">{bgError}</p>}
+          </div>
+
           <div className="space-y-3 px-1">
+            {tool === 'zone' && (
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.15em] text-mist/70" htmlFor="map-boundary-shape">
-                Boundary shape
+                Zone boundary
               </label>
               <select
                 id="map-boundary-shape"
@@ -1055,56 +1659,17 @@ export default function MapCreator() {
                 <option value="rect">Square</option>
                 <option value="circle">Circle</option>
                 <option value="triangle">Triangle</option>
-                <option
-                  value="polygon"
-                  disabled={!!tool && ELEMENT_CONFIGS[tool].style === 'marker'}
-                >
-                  Draw your own
-                </option>
+                <option value="polygon">Draw your own</option>
               </select>
+              <p className="mt-1 text-[10px] text-mist/80 leading-snug">
+                Pick the outline first, then click the map. After it is placed, choose a zone style in Properties — that sets the icon and colour.
+              </p>
             </div>
+            )}
 
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.15em] text-mist/70" htmlFor="map-element-type">
-                Element type
-              </label>
-              <select
-                id="map-element-type"
-                className="select w-full text-xs py-1.5"
-                value={tool ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value as MapElementType | '';
-                  if (!v) {
-                    setTool(null);
-                    setPolygonDraft([]);
-                    setFreehandStroke([]);
-                    freehandStrokeRef.current = [];
-                    isFreehandDrawingRef.current = false;
-                    return;
-                  }
-                  setTool(v);
-                  if (ELEMENT_CONFIGS[v].style === 'marker' && placementBoundaryShape === 'polygon') {
-                    setPlacementBoundaryShape('rect');
-                    setPolygonDraft([]);
-                  }
-                }}
-              >
-                <option value="">Choose type…</option>
-                {CATEGORIES.map((cat) => (
-                  <optgroup key={cat.key} label={cat.label}>
-                    {cat.types.map((type) => (
-                      <option key={type} value={type}>
-                        {ELEMENT_CONFIGS[type].label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            {tool && ELEMENT_CONFIGS[tool].style === 'marker' && (
+            {toolStyle === 'label' && (
               <p className="text-[10px] text-mist/80 leading-snug">
-                Markers use the boundary shape for the icon outline (square, circle, or triangle). Draw-your-own applies as a square marker.
+                Click the map to drop a text label, then edit the text, size and colour in Properties.
               </p>
             )}
 
@@ -1135,25 +1700,25 @@ export default function MapCreator() {
                 <div className="rounded-lg border border-arcane/25 bg-arcane/10 p-2 space-y-2">
                   {polygonDrawStyle === 'points' ? (
                     <p className="text-[10px] text-mist leading-relaxed">
-                      Click the map to add vertices (min 3). Press <kbd className="rounded bg-shadow px-1">Enter</kbd> to
+                      Click the map to add points (min {draftMinPoints}). Press <kbd className="rounded bg-shadow px-1">Enter</kbd> to
                       finish or <kbd className="rounded bg-shadow px-1">Esc</kbd> to cancel.
                     </p>
                   ) : (
                     <p className="text-[10px] text-mist leading-relaxed">
-                      Click and drag on the map — you will see your boundary line as you draw. Release the mouse to set the
-                      shape, then click <span className="text-silver">Complete shape</span> to place it (min 3 points after
-                      smoothing). <kbd className="rounded bg-shadow px-1">Esc</kbd> cancels.
+                      Click and drag on the map — you will see your {isPathTool ? 'path' : 'boundary'} as you draw. Release the mouse,
+                      then click <span className="text-silver">{isPathTool ? 'Finish path' : 'Complete shape'}</span> to place it.{' '}
+                      <kbd className="rounded bg-shadow px-1">Esc</kbd> cancels.
                     </p>
                   )}
-                  <p className="text-[10px] text-arcane tabular-nums">Vertices in shape: {polygonDraft.length}</p>
+                  <p className="text-[10px] text-arcane tabular-nums">Points: {polygonDraft.length}</p>
                   <div className="flex gap-1">
                     <button
                       type="button"
                       className="btn-primary flex-1 py-1.5 text-[10px]"
-                      disabled={polygonDraft.length < 3}
+                      disabled={polygonDraft.length < draftMinPoints}
                       onClick={() => commitPolygonPlacement()}
                     >
-                      Complete shape
+                      {isPathTool ? 'Finish path' : 'Complete shape'}
                     </button>
                     <button
                       type="button"
@@ -1181,14 +1746,25 @@ export default function MapCreator() {
               <Layers size={13} className="text-mist" />
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-mist/80">Layers</span>
             </div>
-            <button
-              type="button"
-              onClick={addLayer}
-              className="text-mist hover:text-arcane transition p-0.5"
-              title="Add layer"
-            >
-              <Plus size={14} />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => deleteLayer(activeLayerId)}
+                disabled={layers.length <= 1}
+                className="text-mist hover:text-blood transition p-0.5 disabled:opacity-25 disabled:hover:text-mist disabled:cursor-not-allowed"
+                title={layers.length <= 1 ? 'Keep at least one layer' : 'Delete selected layer'}
+              >
+                <Trash2 size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={addLayer}
+                className="text-mist hover:text-arcane transition p-0.5"
+                title="Add layer"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-1 pb-1 space-y-0.5">
@@ -1198,7 +1774,7 @@ export default function MapCreator() {
               return (
                 <div
                   key={layer.id}
-                  className={`group flex items-center gap-1 rounded px-1.5 py-1 text-xs transition cursor-pointer ${
+                  className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition cursor-pointer ${
                     isActive
                       ? 'bg-arcane/15 border border-arcane/25'
                       : 'border border-transparent hover:bg-shadow/60'
@@ -1268,34 +1844,33 @@ export default function MapCreator() {
                   {/* Element count */}
                   <span className="shrink-0 text-[9px] text-mist/50 tabular-nums">{count}</span>
 
-                  {/* Reorder + Delete (on hover) */}
-                  <div className="shrink-0 flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Reorder + Delete */}
+                  <div className="shrink-0 flex items-center">
                     <button
                       type="button"
-                      className="p-0.5 text-mist/40 hover:text-mist"
+                      className="p-0.5 text-mist/50 hover:text-mist"
                       onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 1); }}
                       title="Move up"
                     >
-                      <ChevronUp size={10} />
+                      <ChevronUp size={11} />
                     </button>
                     <button
                       type="button"
-                      className="p-0.5 text-mist/40 hover:text-mist"
+                      className="p-0.5 text-mist/50 hover:text-mist"
                       onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, -1); }}
                       title="Move down"
                     >
-                      <ChevronDown size={10} />
+                      <ChevronDown size={11} />
                     </button>
-                    {layers.length > 1 && (
-                      <button
-                        type="button"
-                        className="p-0.5 text-mist/30 hover:text-blood transition"
-                        onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
-                        title="Delete layer"
-                      >
-                        <Trash2 size={10} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={layers.length <= 1}
+                      className="p-0.5 text-mist/60 hover:text-blood transition disabled:opacity-20 disabled:hover:text-mist/60 disabled:cursor-not-allowed"
+                      onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
+                      title={layers.length <= 1 ? 'Keep at least one layer' : `Delete ${layer.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 </div>
               );
@@ -1345,10 +1920,16 @@ export default function MapCreator() {
           backgroundColor: currentMap.backgroundColor,
           cursor: tool ? 'crosshair' : isPanning.current ? 'grabbing' : 'grab',
         }}
-        title={isPolygonDrawMode ? 'Click to add vertices to your boundary' : undefined}
+        title={isPolygonDrawMode ? (isPathTool ? 'Click to add points to your path' : 'Click to add vertices to your boundary') : undefined}
         onMouseDown={handleCanvasDown}
         onMouseMove={handleCanvasMove}
         onWheel={handleWheel}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0];
+          if (f) void handleBackgroundFile(f);
+        }}
       >
         {/* Transform container */}
         <div
@@ -1360,7 +1941,48 @@ export default function MapCreator() {
             top: 0,
           }}
         >
-          {/* Grid */}
+          {/* Uploaded / preset map image, centred on the origin.
+              Sized wrapper + <img> with max-width/height none so Tailwind preflight
+              cannot shrink the art inside the zero-sized transform layer. */}
+          {background && (
+            <div
+              className="absolute pointer-events-none select-none overflow-hidden"
+              style={{
+                left: -background.width / 2,
+                top: -background.height / 2,
+                width: background.width,
+                height: background.height,
+                opacity: background.opacity,
+                zIndex: 0,
+                backgroundColor: '#1a1510',
+                boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+              }}
+              aria-hidden
+            >
+              <img
+                src={background.url}
+                alt=""
+                draggable={false}
+                className="block max-h-none max-w-none"
+                style={{
+                  width: background.width,
+                  height: background.height,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  objectFit: 'fill',
+                }}
+                onLoad={() => {
+                  // Ensure framing after the bitmap is actually decoded.
+                  fitToRect(background.width, background.height);
+                }}
+                onError={() =>
+                  setBgError('Map image failed to display. Try Fit, re-select a preset, or re-upload.')
+                }
+              />
+            </div>
+          )}
+
+          {/* Grid — softer when a map image is present so the art stays readable */}
           {gridEnabled && (
             <div
               className="absolute pointer-events-none"
@@ -1370,7 +1992,9 @@ export default function MapCreator() {
                 width: GRID_WORLD_SIZE,
                 height: GRID_WORLD_SIZE,
                 backgroundImage:
-                  'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
+                  background
+                    ? 'linear-gradient(rgba(0,0,0,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.12) 1px, transparent 1px)'
+                    : 'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
                 backgroundSize: `${gridSize}px ${gridSize}px`,
               }}
             />
@@ -1381,7 +2005,11 @@ export default function MapCreator() {
           <div className="absolute pointer-events-none" style={{ left: -20, top: -1, width: 40, height: 2, backgroundColor: 'rgba(139,92,246,0.2)' }} />
 
           {(polygonDraft.length > 0 || freehandStroke.length > 0) && (
-            <PolygonDraftOverlay clickPoints={polygonDraft} freehandLive={freehandStroke} />
+            <PolygonDraftOverlay
+              clickPoints={polygonDraft}
+              freehandLive={freehandStroke}
+              curved={tool === 'trail'}
+            />
           )}
 
           {/* Map elements sorted by layer order */}
@@ -1404,32 +2032,107 @@ export default function MapCreator() {
           })}
         </div>
 
+        {/* Start-your-map chooser for a brand-new, empty map */}
+        {!background && elements.length === 0 && !starterDismissed && !tool && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pointer-events-none">
+            <div
+              className="wz-modal pointer-events-auto w-full max-w-3xl rounded-xl border border-dusk/80 bg-abyss/95 p-5 shadow-2xl backdrop-blur"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-[Cinzel] text-lg font-semibold text-moonlight">Start your map</h3>
+                  <p className="mt-1 text-sm text-mist">
+                    Upload your own map image, or pick a ready-made one — then add pins, labels, zones and trails on top.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-mist hover:text-moonlight p-1"
+                  onClick={() => setStarterDismissed(true)}
+                  aria-label="Close and start with a blank grid"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <button
+                  type="button"
+                  className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-arcane/40 bg-arcane/5 p-4 text-center transition hover:border-arcane hover:bg-arcane/10"
+                  onClick={() => bgFileRef.current?.click()}
+                  disabled={bgUploading}
+                >
+                  {bgUploading ? (
+                    <Loader2 size={22} className="animate-spin text-arcane" />
+                  ) : (
+                    <Upload size={22} className="text-arcane" />
+                  )}
+                  <span className="text-sm font-medium text-moonlight">Upload your map</span>
+                  <span className="text-[11px] text-mist">PNG, JPG, WEBP · or drop it on the canvas</span>
+                </button>
+                {MAP_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="group overflow-hidden rounded-lg border border-dusk/70 bg-shadow/40 text-left transition hover:border-arcane/50"
+                    onClick={() => setBackgroundFromUrl(p.url, p.id)}
+                  >
+                    <div
+                      className="h-24 w-full bg-void transition group-hover:scale-[1.03]"
+                      style={{ backgroundImage: `url(${p.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                      aria-hidden
+                    />
+                    <div className="p-2">
+                      <span className="block text-sm font-medium text-moonlight">{p.name}</span>
+                      <span className="block text-[11px] leading-snug text-mist">{p.description}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="mt-3 text-xs text-mist underline-offset-2 hover:text-moonlight hover:underline"
+                onClick={() => setStarterDismissed(true)}
+              >
+                Start with a blank grid instead
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tool indicator */}
         {tool && !isPolygonDrawMode && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-arcane/90 text-white px-4 py-1.5 rounded-full text-sm font-medium shadow-lg flex items-center gap-2 pointer-events-none">
             <Plus size={14} />
-            Place {ELEMENT_CONFIGS[tool].label} ({placementBoundaryShape === 'rect' ? 'square' : placementBoundaryShape}) on &ldquo;
-            {layers.find((l) => l.id === activeLayerId)?.name ?? 'layer'}&rdquo;
+            {toolStyle === 'label' ? (
+              <>Click the map to place a label</>
+            ) : (
+              <>
+                Place {ELEMENT_CONFIGS[tool].label} ({placementBoundaryShape === 'rect' ? 'square' : placementBoundaryShape}) on &ldquo;
+                {layers.find((l) => l.id === activeLayerId)?.name ?? 'layer'}&rdquo;
+              </>
+            )}
           </div>
         )}
         {isPolygonDrawMode && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-mystic/90 text-white px-4 py-1.5 rounded-full text-xs font-medium shadow-lg pointer-events-none text-center max-w-lg">
             {polygonDrawStyle === 'freehand' && freehandStroke.length > 0 ? (
               <>
-                Drawing — boundary line follows your cursor · <span className="text-moonlight">release the mouse</span> to
+                Drawing — {isPathTool ? 'path' : 'boundary'} follows your cursor · <span className="text-moonlight">release the mouse</span> to
                 finish the stroke
               </>
-            ) : polygonDrawStyle === 'freehand' && polygonDraft.length >= 3 ? (
+            ) : polygonDrawStyle === 'freehand' && polygonDraft.length >= draftMinPoints ? (
               <>
-                Boundary set — {polygonDraft.length} points · click <span className="text-moonlight">Complete shape</span>{' '}
-                to place on the map
+                {isPathTool ? 'Path' : 'Boundary'} set — {polygonDraft.length} points · click{' '}
+                <span className="text-moonlight">{isPathTool ? 'Finish path' : 'Complete shape'}</span> to place on the map
               </>
             ) : polygonDrawStyle === 'freehand' ? (
-              <>Click and drag on the map — your line appears as you draw</>
+              <>Click and drag on the map — your {isPathTool ? 'path' : 'line'} appears as you draw</>
             ) : (
               <>
-                Point to point — {polygonDraft.length} vertex{polygonDraft.length === 1 ? '' : 'es'} ·{' '}
-                <kbd className="rounded bg-black/30 px-1">Enter</kbd> to complete (min 3)
+                {isPathTool ? `${ELEMENT_CONFIGS[tool!].label}: ` : 'Point to point — '}
+                {polygonDraft.length} point{polygonDraft.length === 1 ? '' : 's'} ·{' '}
+                <kbd className="rounded bg-black/30 px-1">Enter</kbd> to {isPathTool ? 'finish' : 'complete'} (min {draftMinPoints})
               </>
             )}
           </div>
@@ -1439,6 +2142,8 @@ export default function MapCreator() {
         {selectedElement &&
           !tool &&
           selectedElement.boundaryShape !== 'polygon' &&
+          selectedElement.boundaryShape !== 'path' &&
+          ELEMENT_CONFIGS[selectedElement.type]?.style !== 'label' &&
           !lockedLayerIds.has(selectedElement.layerId) &&
           (() => {
           const sel = liveOverrideRef.current[selectedElement.id]
@@ -1496,21 +2201,167 @@ export default function MapCreator() {
           <div className="flex-1 overflow-y-auto p-3 space-y-4">
             {/* Type badge */}
             <div className="flex items-center gap-2">
-              {(() => { const Icon = ELEMENT_CONFIGS[selectedElement.type].icon; return <Icon size={16} style={{ color: selectedElement.color }} />; })()}
-              <span className="text-sm font-medium text-silver">{ELEMENT_CONFIGS[selectedElement.type].label}</span>
+              {(() => {
+                const Icon =
+                  selectedElement.type === 'pin'
+                    ? pinIconFor(propForm.pinIcon ?? selectedElement.pinIcon)
+                    : isZoneLike(selectedElement)
+                      ? zoneKindOption(propForm.zoneKind ?? zoneKindOf(selectedElement)).icon
+                      : ELEMENT_CONFIGS[selectedElement.type].icon;
+                return <Icon size={16} style={{ color: selectedElement.color }} />;
+              })()}
+              <span className="text-sm font-medium text-silver">
+                {isZoneLike(selectedElement)
+                  ? `Zone · ${zoneKindOption(propForm.zoneKind ?? zoneKindOf(selectedElement)).label}`
+                  : ELEMENT_CONFIGS[selectedElement.type].label}
+              </span>
             </div>
 
             {/* Name */}
             <div>
-              <label className="label text-xs" htmlFor="prop-name">Name</label>
+              <label className="label text-xs" htmlFor="prop-name">
+                {selectedStyle === 'label' ? 'Text' : 'Name'}
+              </label>
               <input
                 id="prop-name"
                 className="input text-sm"
                 value={propForm.name ?? ''}
                 onChange={(e) => applyProp({ name: e.target.value })}
-                placeholder="Name this element"
+                placeholder={selectedStyle === 'label' ? 'Label text' : 'Name this element'}
+                autoFocus={selectedStyle === 'label'}
               />
             </div>
+
+            {isZoneLike(selectedElement) && (
+              <div>
+                <label className="label text-xs">Zone style</label>
+                <p className="mb-1.5 text-[10px] text-mist leading-snug">
+                  Chooses the icon and a matching colour. You can still override colour below.
+                </p>
+                <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Zone style">
+                  {ZONE_KIND_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const active = (propForm.zoneKind ?? zoneKindOf(selectedElement)) === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        title={opt.label}
+                        onClick={() => {
+                          const currentName = (propForm.name ?? selectedElement.name ?? '').trim();
+                          const isDefaultName =
+                            !currentName || ZONE_KIND_OPTIONS.some((k) => k.label === currentName);
+                          applyProp({
+                            zoneKind: opt.id,
+                            color: opt.color,
+                            ...(isDefaultName ? { name: opt.label } : {}),
+                          });
+                        }}
+                        className={`flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-[9px] transition ${
+                          active
+                            ? 'border-arcane/60 bg-arcane/20 text-moonlight'
+                            : 'border-dusk/70 bg-shadow/50 text-mist hover:border-dusk hover:text-moonlight'
+                        }`}
+                      >
+                        <Icon size={15} style={{ color: active ? opt.color : undefined }} />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {selectedElement.type === 'pin' && (
+              <div>
+                <label className="label text-xs">Pin icon</label>
+                <div className="grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Pin icon">
+                  {PIN_ICON_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const active = (propForm.pinIcon ?? selectedElement.pinIcon ?? 'pin') === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        title={opt.label}
+                        onClick={() => applyProp({ pinIcon: opt.id })}
+                        className={`flex h-9 w-full items-center justify-center rounded-md border transition ${
+                          active
+                            ? 'border-arcane/60 bg-arcane/20 text-moonlight'
+                            : 'border-dusk/70 bg-shadow/50 text-mist hover:border-dusk hover:text-moonlight'
+                        }`}
+                      >
+                        <Icon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {selectedStyle === 'label' && (
+              <div>
+                <label className="label text-xs">Text size</label>
+                <input
+                  type="range"
+                  min={8}
+                  max={96}
+                  step={1}
+                  className="w-full accent-arcane"
+                  value={propForm.fontSize ?? DEFAULT_LABEL_FONT_SIZE}
+                  onChange={(e) => applyProp({ fontSize: parseInt(e.target.value, 10) })}
+                />
+                <span className="text-[10px] text-mist">{propForm.fontSize ?? DEFAULT_LABEL_FONT_SIZE}px</span>
+              </div>
+            )}
+
+            {selectedIsPath && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label text-xs">Line width</label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={40}
+                    step={1}
+                    className="w-full mt-2 accent-arcane"
+                    value={propForm.strokeWidth ?? DEFAULT_STROKE_WIDTH}
+                    onChange={(e) => applyProp({ strokeWidth: parseInt(e.target.value, 10) })}
+                  />
+                  <span className="text-[10px] text-mist">{propForm.strokeWidth ?? DEFAULT_STROKE_WIDTH}px</span>
+                </div>
+                <div>
+                  <label className="label text-xs">Line style</label>
+                  <select
+                    className="select text-sm"
+                    value={propForm.lineStyle ?? (selectedElement.type === 'trail' ? 'dashed' : 'solid')}
+                    onChange={(e) => applyProp({ lineStyle: e.target.value as MapLineStyle })}
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="label text-xs">Line shape</label>
+                  <select
+                    className="select text-sm"
+                    value={
+                      propForm.pathStyle ??
+                      (selectedElement.type === 'trail' ? 'curve' : 'straight')
+                    }
+                    onChange={(e) => applyProp({ pathStyle: e.target.value as MapPathStyle })}
+                  >
+                    <option value="curve">Curved</option>
+                    <option value="straight">Straight</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Layer assignment */}
             <div>
@@ -1527,6 +2378,7 @@ export default function MapCreator() {
             </div>
 
             {/* Boundary shape */}
+            {isZoneLike(selectedElement) && (
             <div>
               <label className="label text-xs">Boundary shape</label>
               <select
@@ -1547,6 +2399,7 @@ export default function MapCreator() {
                 </p>
               )}
             </div>
+            )}
 
             {/* Color + Opacity */}
             <div className="grid grid-cols-2 gap-3">
@@ -1575,6 +2428,7 @@ export default function MapCreator() {
             </div>
 
             {/* Size */}
+            {!selectedIsPath && selectedStyle !== 'label' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label text-xs">Width</label>
@@ -1597,6 +2451,7 @@ export default function MapCreator() {
                 />
               </div>
             </div>
+            )}
 
             {/* Link to Location */}
             <div>

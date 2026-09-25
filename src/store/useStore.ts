@@ -22,7 +22,7 @@ import { API_BASE } from '../api';
 
 const now = () => new Date().toISOString();
 
-const STORE_VERSION = 16;
+const STORE_VERSION = 17;
 
 const DATA_KEYS = [
   'worlds', 'stories', 'characters', 'locations', 'factions',
@@ -454,6 +454,20 @@ function migrateState(persisted: Record<string, unknown>, version: number): Reco
           if (Array.isArray(list) && !list.includes(worldRfId)) {
             nodeIds[worldId] = [worldRfId, ...list.filter((x) => typeof x === 'string')];
           }
+        }
+      }
+    }
+  }
+
+  if (version < 17) {
+    const creatures = (state as Record<string, unknown>).customCreatures as
+      | Record<string, unknown>[]
+      | undefined;
+    if (Array.isArray(creatures)) {
+      for (const c of creatures) {
+        if (c.source === 'srd') {
+          c.source = 'custom';
+          c.isCustom = true;
         }
       }
     }

@@ -115,7 +115,7 @@ export default function Dashboard() {
 
       <section className="mb-10" aria-label="Library statistics">
         <h2 className="section-title font-[Cinzel]">Your archive</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="wz-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {statItems.map(
             ({ label, count, icon: Icon, badgeClass }) => (
               <div
@@ -206,7 +206,7 @@ export default function Dashboard() {
       ) : (
         <section aria-label="Recent worlds">
           <h2 className="section-title font-[Cinzel]">Recent worlds</h2>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="wz-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {recentWorlds.map((world) => (
               <button
                 key={world.id}

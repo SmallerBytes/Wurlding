@@ -19,7 +19,6 @@ import type { Creature, CreatureSource } from '../types';
 import { getAbilityModifier, formatModifier } from '../types';
 
 const SOURCE_ORDER: CreatureSource[] = [
-  'srd',
   'mythology-greek',
   'mythology-norse',
   'mythology-celtic',
@@ -35,8 +34,6 @@ const SIZES = ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'] as cons
 
 function sourceBadgeClass(source: CreatureSource): string {
   switch (source) {
-    case 'srd':
-      return 'badge-arcane';
     case 'mythology-greek':
       return 'badge-gold';
     case 'mythology-norse':
@@ -527,8 +524,10 @@ export default function Bestiary() {
   const [addOpen, setAddOpen] = useState(false);
 
   const allCreatures = useMemo(() => {
-    const merged = [...BESTIARY, ...customCreatures];
-    return merged.sort((a, b) => a.name.localeCompare(b.name));
+    const remapped = customCreatures.map((c) =>
+      (c.source as string) === 'srd' ? { ...c, source: 'custom' as const, isCustom: true } : c,
+    );
+    return [...BESTIARY, ...remapped].sort((a, b) => a.name.localeCompare(b.name));
   }, [customCreatures]);
 
   const filtered = useMemo(() => {
@@ -565,7 +564,7 @@ export default function Bestiary() {
           </p>
           <h1 className="page-title font-[Cinzel] text-3xl md:text-4xl">Bestiary</h1>
           <p className="mt-2 max-w-2xl text-sm text-mist leading-relaxed">
-            A grimoire of beasts, horrors, and legends drawn from the SRD, world myth, and your own
+            A grimoire of beasts, horrors, and legends drawn from world myth, folklore, and your own
             nightmares.
           </p>
         </div>

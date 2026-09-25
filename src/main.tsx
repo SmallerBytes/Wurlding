@@ -4,6 +4,10 @@ import './index.css';
 import App from './App';
 import useStore from './store/useStore';
 import { loadFromFile } from './store/useStore';
+import { initMotion, initTheme } from './theme';
+
+initTheme();
+initMotion();
 
 loadFromFile().then((fileData) => {
   if (fileData) {

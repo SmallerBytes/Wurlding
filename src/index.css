@@ -21,6 +21,26 @@
   --font-body: "Inter", system-ui, sans-serif;
 }
 
+/* Soft off-white light theme — easy on the eyes, not stark pure white */
+html[data-theme='light'] {
+  --color-void: #f4f1ea;
+  --color-abyss: #faf8f4;
+  --color-shadow: #efebe3;
+  --color-dusk: #d9d2c4;
+  --color-twilight: #cfc6b6;
+  --color-mist: #6f6878;
+  --color-silver: #4d4758;
+  --color-moonlight: #2c2834;
+  --color-ember: #e85d2c;
+  --color-flame: #d97706;
+  --color-blood: #b91c1c;
+  --color-arcane: #7c3aed;
+  --color-mystic: #6d28d9;
+  --color-fey: #059669;
+  --color-frost: #0891b2;
+  --color-gold: #b45309;
+}
+
 @layer base {
   * {
     scrollbar-width: thin;
@@ -41,9 +61,269 @@
     color: var(--color-moonlight);
   }
 
+  html[data-theme='light'] ::selection {
+    background-color: rgba(124, 58, 237, 0.22);
+    color: var(--color-moonlight);
+  }
+
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     color: var(--color-moonlight);
+  }
+}
+
+html[data-theme='light'] .btn-primary {
+  color: #faf8f4;
+}
+
+html[data-theme='light'] .textarea.chapter-write,
+html[data-theme='light'] .focus-write-textarea {
+  background-color: #fbfaf7;
+  border-color: #d4cdc0;
+  color: #2c2834;
+  box-shadow: inset 0 1px 2px rgba(44, 40, 52, 0.04);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Whimsy: small-detail motion. Everything below is gated on          */
+/*  html[data-motion='on'] so Settings → Animations can switch it off. */
+/* ------------------------------------------------------------------ */
+
+@keyframes wz-page-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes wz-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes wz-modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wz-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes wz-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.08); }
+  70%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+@keyframes wz-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25%  { transform: rotate(-9deg) scale(1.08); }
+  60%  { transform: rotate(7deg) scale(1.08); }
+}
+@keyframes wz-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes wz-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.55), 0 0 14px rgba(167, 139, 250, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(167, 139, 250, 0), 0 0 22px rgba(167, 139, 250, 0.7); }
+}
+@keyframes wz-pin-drop {
+  0%   { transform: translateY(-26px) scale(0.6); opacity: 0; }
+  55%  { transform: translateY(3px) scale(1.06); opacity: 1; }
+  75%  { transform: translateY(-3px) scale(0.98); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes wz-sheen {
+  from { transform: translateX(-130%) skewX(-18deg); }
+  to   { transform: translateX(230%) skewX(-18deg); }
+}
+@keyframes wz-shimmer-text {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes wz-mote {
+  0%   { transform: translate3d(0, 0, 0) scale(0.8); opacity: 0; }
+  12%  { opacity: var(--mote-alpha, 0.55); }
+  50%  { transform: translate3d(var(--mote-dx, 14px), -46vh, 0) scale(1.05); }
+  88%  { opacity: var(--mote-alpha, 0.55); }
+  100% { transform: translate3d(calc(var(--mote-dx, 14px) * -0.6), -92vh, 0) scale(0.7); opacity: 0; }
+}
+@keyframes wz-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50%      { opacity: 1; transform: scale(1.15); }
+}
+
+/* Page transitions */
+html[data-motion='on'] .wz-page {
+  animation: wz-page-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Staggered card entrance (add .wz-stagger to a container of .card / .card-hover / li) */
+html[data-motion='on'] .wz-stagger > * {
+  animation: wz-rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+html[data-motion='on'] .wz-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(2) { animation-delay: 0.06s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(3) { animation-delay: 0.10s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(4) { animation-delay: 0.14s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(5) { animation-delay: 0.18s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(6) { animation-delay: 0.22s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(7) { animation-delay: 0.26s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(8) { animation-delay: 0.30s; }
+html[data-motion='on'] .wz-stagger > *:nth-child(n + 9) { animation-delay: 0.34s; }
+
+/* Modals */
+html[data-motion='on'] .wz-modal-backdrop { animation: wz-backdrop-in 0.22s ease-out both; }
+html[data-motion='on'] .wz-modal { animation: wz-modal-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Buttons: lift, press, and a sheen sweeping across primary buttons on hover */
+html[data-motion='on'] .btn-primary,
+html[data-motion='on'] .btn-secondary,
+html[data-motion='on'] .btn-danger {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+html[data-motion='on'] .btn-primary:hover,
+html[data-motion='on'] .btn-secondary:hover,
+html[data-motion='on'] .btn-danger:hover {
+  transform: translateY(-1px);
+}
+html[data-motion='on'] .btn-primary:hover {
+  box-shadow: 0 6px 18px -6px rgba(139, 92, 246, 0.55);
+}
+html[data-motion='on'] .btn-primary:active,
+html[data-motion='on'] .btn-secondary:active,
+html[data-motion='on'] .btn-danger:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.06s;
+}
+html[data-motion='on'] .btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+html[data-motion='on'] .btn-primary::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 38%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: translateX(-130%) skewX(-18deg);
+  pointer-events: none;
+}
+html[data-motion='on'] .btn-primary:hover::after {
+  animation: wz-sheen 0.7s ease-out;
+}
+html[data-motion='on'] .btn-primary > svg,
+html[data-motion='on'] .btn-secondary > svg {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+html[data-motion='on'] .btn-primary:hover > svg,
+html[data-motion='on'] .btn-secondary:hover > svg {
+  transform: rotate(-8deg) scale(1.12);
+}
+
+/* “Saved” confirmation pop */
+html[data-motion='on'] .wz-saved-pop {
+  animation: wz-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Sidebar navigation: icon wiggle on hover, gentle lift on the active item */
+html[data-motion='on'] .wz-nav-link svg {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+html[data-motion='on'] .wz-nav-link:hover svg {
+  animation: wz-wiggle 0.5s ease-in-out;
+}
+html[data-motion='on'] .wz-nav-link {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+html[data-motion='on'] .wz-nav-link:hover {
+  transform: translateX(2px);
+}
+
+/* Shimmering wordmark */
+html[data-motion='on'] .wz-wordmark {
+  background: linear-gradient(
+    100deg,
+    var(--color-moonlight) 0%,
+    var(--color-moonlight) 38%,
+    var(--color-mystic) 50%,
+    var(--color-moonlight) 62%,
+    var(--color-moonlight) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: wz-shimmer-text 6s linear infinite;
+}
+
+/* Cards: springier hover */
+html[data-motion='on'] .card-hover {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s, box-shadow 0.3s;
+}
+html[data-motion='on'] .card-hover:hover {
+  transform: translateY(-4px) rotate(-0.25deg);
+}
+
+/* Inputs: softly bloom on focus */
+html[data-motion='on'] .input:focus,
+html[data-motion='on'] .textarea:focus,
+html[data-motion='on'] .select:focus {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18), 0 0 18px -6px rgba(139, 92, 246, 0.5);
+}
+
+/* Floating hero icons in empty states */
+html[data-motion='on'] .wz-float {
+  animation: wz-float 3.6s ease-in-out infinite;
+}
+
+/* Pulsing selection (timeline points) */
+html[data-motion='on'] .wz-glow-pulse {
+  animation: wz-glow-pulse 1.8s ease-in-out infinite;
+}
+
+/* Map markers drop in when they appear */
+html[data-motion='on'] .wz-pin-drop {
+  animation: wz-pin-drop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 100%;
+}
+
+/* Ambient motes drifting up the page (rendered by <AmbientMotes />) */
+.wz-motes {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.wz-mote {
+  position: absolute;
+  bottom: -4vh;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--mote-color, rgba(167, 139, 250, 0.9)) 0%, transparent 70%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+html[data-motion='on'] .wz-mote {
+  animation: wz-mote var(--mote-duration, 22s) linear infinite;
+  animation-delay: var(--mote-delay, 0s);
+}
+html[data-motion='on'] .wz-mote::after {
+  content: '';
+  position: absolute;
+  inset: 25%;
+  border-radius: 9999px;
+  background: var(--mote-color, rgba(167, 139, 250, 0.9));
+  animation: wz-twinkle var(--mote-twinkle, 2.6s) ease-in-out infinite;
+}
+html[data-motion='off'] .wz-motes { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='on']) *,
+  html:not([data-motion='on']) *::before,
+  html:not([data-motion='on']) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
 
