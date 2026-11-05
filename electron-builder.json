@@ -16,6 +16,7 @@
   "asar": true,
   "win": {
     "icon": "build/app-icon.ico",
+    "signAndEditExecutable": false,
     "target": [
       {
         "target": "nsis",
