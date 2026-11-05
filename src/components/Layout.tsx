@@ -1,14 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import AmbientMotes from './AmbientMotes';
+import PixelCritters from './PixelCritters';
 import {
   Globe, BookOpen, Users, Sword, Bug, Network, GitBranch,
   ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings,
 } from 'lucide-react';
 import useStore from '../store/useStore';
-import { APP_VERSION } from '../constants/appMeta';
-import WhatsNewModal from './WhatsNewModal';
-import { WHATS_NEW } from '../data/whatsNew';
 
 const NAV_ITEMS = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -26,22 +24,6 @@ const NAV_ITEMS = [
   { to: '/web', icon: Network, label: 'World Web' },
 ];
 
-const WHATS_NEW_SEEN_KEY = 'wurlding:lastSeenVersion';
-
-function semverParts(v: string): [number, number, number] {
-  const [a, b, c] = v.split('.').map((x) => Number.parseInt(x || '0', 10));
-  return [a || 0, b || 0, c || 0];
-}
-
-function semverCompare(a: string, b: string): number {
-  const pa = semverParts(a);
-  const pb = semverParts(b);
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] !== pb[i]) return pa[i] - pb[i];
-  }
-  return 0;
-}
-
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -52,31 +34,11 @@ export default function Layout() {
   /** Map Creator manages its own viewport; skip the page-enter animation there so the canvas never blurs. */
   const pageKey = location.pathname;
   const animatePage = !location.pathname.startsWith('/map');
-  const entriesToShow = useMemo(() => {
-    const lastSeen = localStorage.getItem(WHATS_NEW_SEEN_KEY) || '';
-    // Show notes for versions newer than lastSeen; fallback to the latest entry.
-    const newer = WHATS_NEW.filter((e) => semverCompare(e.version, lastSeen) > 0);
-    if (newer.length > 0) return newer;
-    // If the app updated but notes list doesn't include the version, don't spam the user.
-    return [];
-  }, []);
-
-  const [showWhatsNew, setShowWhatsNew] = useState(() => entriesToShow.length > 0);
 
   return (
     <div className="relative flex h-screen overflow-hidden">
       <AmbientMotes />
-      {showWhatsNew && (
-        <WhatsNewModal
-          entries={entriesToShow}
-          onClose={() => {
-            // Mark the newest shown entry as "seen" so we only show once per What's New entry.
-            const newestShown = entriesToShow[0]?.version || APP_VERSION;
-            localStorage.setItem(WHATS_NEW_SEEN_KEY, newestShown);
-            setShowWhatsNew(false);
-          }}
-        />
-      )}
+      <PixelCritters />
 
       {mobileOpen && (
         <div

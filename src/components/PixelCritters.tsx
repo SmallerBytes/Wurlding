@@ -1,0 +1,697 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  CRITTERS_EVENT,
+  MOTION_EVENT,
+  getStoredCritters,
+  getStoredMotion,
+  type CritterGenre,
+  type MotionPref,
+} from '../theme';
+import {
+  CRITTERS,
+  getCritterGenre,
+  renderSpriteFrame,
+  spriteSize,
+  type CritterId,
+  type CritterSprite,
+} from '../data/pixelCritters';
+
+/** Page furniture a companion may land on, walk along, or circle. */
+const PERCH_SELECTOR = [
+  'main .card',
+  'main .card-hover',
+  'main .page-header',
+  'main h1',
+  'main h2',
+  'main h3',
+  'main .btn-primary',
+  'main .btn-secondary',
+  'main img',
+  'main .input',
+  'main .select',
+  'main .textarea',
+  'aside .wz-wordmark',
+].join(', ');
+
+const PERCH_REFRESH_SECONDS = 1.5;
+const MAX_DT = 0.05;
+const MAX_PARTICLES = 160;
+
+type State = 'roam' | 'approach' | 'perch' | 'orbit' | 'walk' | 'pause' | 'hop';
+
+interface Perch {
+  /** Null for the floor of the window. */
+  el: Element | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface Hop {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  t: number;
+  dur: number;
+  arc: number;
+  to: Perch;
+}
+
+interface Critter {
+  sprite: CritterSprite;
+  frames: [HTMLCanvasElement[], HTMLCanvasElement[]];
+  w: number;
+  h: number;
+  x: number;
+  y: number;
+  facing: 1 | -1;
+  frame: number;
+  frameClock: number;
+  state: State;
+  timer: number;
+  tx: number;
+  ty: number;
+  perch: Perch | null;
+  perchOffset: number;
+  hop: Hop | null;
+  phase: number;
+  orbitAngle: number;
+  orbitRadius: number;
+  trailClock: number;
+  fireClock: number;
+}
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  size: number;
+  color: string;
+  gravity: number;
+}
+
+const frameCache = new Map<CritterId, [HTMLCanvasElement[], HTMLCanvasElement[]]>();
+
+function framesFor(sprite: CritterSprite): [HTMLCanvasElement[], HTMLCanvasElement[]] | null {
+  const cached = frameCache.get(sprite.id);
+  if (cached) return cached;
+  const right: HTMLCanvasElement[] = [];
+  const left: HTMLCanvasElement[] = [];
+  for (let i = 0; i < sprite.frames.length; i++) {
+    const r = renderSpriteFrame(sprite, i, false);
+    const l = renderSpriteFrame(sprite, i, true);
+    if (!r || !l) return null;
+    right.push(r);
+    left.push(l);
+  }
+  const pair: [HTMLCanvasElement[], HTMLCanvasElement[]] = [right, left];
+  frameCache.set(sprite.id, pair);
+  return pair;
+}
+
+function rand(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function pickCast(genre: CritterGenre): CritterId[] {
+  const info = getCritterGenre(genre);
+  if (info.cast.length <= info.count) return [...info.cast];
+  const pool = [...info.cast];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return pool.slice(0, info.count);
+}
+
+function floorPerch(): Perch {
+  return { el: null, x: 0, y: window.innerHeight - 1, w: window.innerWidth, h: 1 };
+}
+
+/** Re-read a perch from the DOM. False when it scrolled away or was removed. */
+function refreshPerch(p: Perch): boolean {
+  if (!p.el) {
+    p.x = 0;
+    p.w = window.innerWidth;
+    p.y = window.innerHeight - 1;
+    return true;
+  }
+  if (!p.el.isConnected) return false;
+  const r = p.el.getBoundingClientRect();
+  if (r.width < 24 || r.height < 6) return false;
+  if (r.top < 8 || r.top > window.innerHeight - 8 || r.right < 0 || r.left > window.innerWidth) return false;
+  p.x = r.left;
+  p.y = r.top;
+  p.w = r.width;
+  p.h = r.height;
+  return true;
+}
+
+function collectPerches(): Perch[] {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const out: Perch[] = [];
+  document.querySelectorAll(PERCH_SELECTOR).forEach((el) => {
+    if (el.closest('[role="dialog"]')) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 24 || r.height < 6) return;
+    if (r.top < 8 || r.top > vh - 8 || r.right < 0 || r.left > vw) return;
+    out.push({ el, x: r.left, y: r.top, w: r.width, h: r.height });
+  });
+  return out;
+}
+
+/** Companions stand with their feet a pixel or two into the surface so they read as resting on it. */
+function restingY(c: Critter, p: Perch): number {
+  return p.y - c.h + c.sprite.scale;
+}
+
+function clampToViewport(c: Critter): void {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  c.x = Math.min(Math.max(c.x, -c.w * 0.25), vw - c.w * 0.75);
+  c.y = Math.min(Math.max(c.y, 0), vh - c.h);
+}
+
+function randomSkyTarget(c: Critter): void {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  c.tx = rand(0, Math.max(1, vw - c.w));
+  const maxY = c.sprite.skyward ? vh * 0.45 : vh - c.h;
+  c.ty = rand(0, Math.max(1, maxY));
+}
+
+function moveToward(c: Critter, dt: number, speed: number): number {
+  const dx = c.tx - c.x;
+  const dy = c.ty - c.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.001) return 0;
+  const step = Math.min(dist, speed * dt);
+  c.x += (dx / dist) * step;
+  c.y += (dy / dist) * step;
+  if (Math.abs(dx) > 2) c.facing = dx > 0 ? 1 : -1;
+  return dist - step;
+}
+
+function makeCritter(id: CritterId): Critter | null {
+  const sprite = CRITTERS[id];
+  const frames = framesFor(sprite);
+  if (!frames) return null;
+  const size = spriteSize(sprite);
+  const w = size.w * sprite.scale;
+  const h = size.h * sprite.scale;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const c: Critter = {
+    sprite,
+    frames,
+    w,
+    h,
+    x: rand(0, Math.max(1, vw - w)),
+    y: rand(0, Math.max(1, vh - h)),
+    facing: Math.random() < 0.5 ? 1 : -1,
+    frame: 0,
+    frameClock: Math.random() * sprite.frameTime,
+    state: sprite.kind === 'flyer' ? 'roam' : 'walk',
+    timer: rand(1.5, 4),
+    tx: 0,
+    ty: 0,
+    perch: null,
+    perchOffset: 0,
+    hop: null,
+    phase: Math.random() * Math.PI * 2,
+    orbitAngle: 0,
+    orbitRadius: 0,
+    trailClock: 0,
+    fireClock: rand(3, 8),
+  };
+  if (sprite.kind === 'flyer') {
+    randomSkyTarget(c);
+  } else {
+    c.perch = floorPerch();
+    c.perchOffset = c.x - c.perch.x;
+    c.y = restingY(c, c.perch);
+  }
+  return c;
+}
+
+function surfacesFor(c: Critter, perches: Perch[]): Perch[] {
+  const minWidth = c.sprite.skyward ? c.w * 1.1 : c.w * 0.6;
+  return perches.filter((p) => p.w >= minWidth);
+}
+
+function pickPerch(c: Critter, perches: Perch[], maxDistance: number): Perch | null {
+  const candidates = surfacesFor(c, perches).filter((p) => p !== c.perch);
+  if (candidates.length === 0) return null;
+  const cx = c.x + c.w / 2;
+  const cy = c.y + c.h;
+  const near = candidates.filter((p) => {
+    const px = Math.min(Math.max(cx, p.x), p.x + p.w);
+    return Math.hypot(px - cx, p.y - cy) <= maxDistance;
+  });
+  const pool = near.length > 0 ? near : candidates;
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+}
+
+function startApproach(c: Critter, p: Perch): void {
+  c.perch = p;
+  c.perchOffset = rand(0, Math.max(0, p.w - c.w));
+  c.state = 'approach';
+  c.timer = rand(4, 7);
+}
+
+function startHop(c: Critter, to: Perch): void {
+  const x1 = to.x + Math.min(Math.max(c.perchOffset, 0), Math.max(0, to.w - c.w));
+  const y1 = restingY(c, to);
+  const dx = x1 - c.x;
+  const dy = y1 - c.y;
+  const dist = Math.hypot(dx, dy);
+  const hops = Boolean(c.sprite.hops);
+  const dur = hops ? Math.min(1.2, 0.45 + dist / 700) : Math.max(0.5, dist / (c.sprite.speed * 2.2));
+  c.hop = {
+    x0: c.x,
+    y0: c.y,
+    x1,
+    y1,
+    t: 0,
+    dur,
+    arc: hops ? Math.max(28, Math.abs(dy) * 0.35 + 36) : 0,
+    to,
+  };
+  c.facing = dx >= 0 ? 1 : -1;
+  c.state = 'hop';
+}
+
+function emitTrail(c: Critter, particles: Particle[], dt: number): void {
+  if (!c.sprite.trail) return;
+  c.trailClock -= dt;
+  if (c.trailClock > 0) return;
+  c.trailClock = 0.07;
+  if (particles.length >= MAX_PARTICLES) return;
+  const s = c.sprite.scale;
+  particles.push({
+    x: c.x + c.w / 2 + rand(-s * 2, s * 2),
+    y: c.y + c.h * 0.7 + rand(-s, s),
+    vx: rand(-8, 8) - c.facing * 10,
+    vy: rand(6, 20),
+    life: 0,
+    max: rand(0.5, 0.9),
+    size: s,
+    color: c.sprite.trail,
+    gravity: 0,
+  });
+}
+
+function emitFire(c: Critter, particles: Particle[]): void {
+  const s = c.sprite.scale;
+  const mouthX = c.facing > 0 ? c.x + c.w - s * 2 : c.x + s * 2;
+  const mouthY = c.y + c.h * 0.5;
+  const colors = ['#fb923c', '#f97316', '#fde047', '#ef4444'];
+  for (let i = 0; i < 12 && particles.length < MAX_PARTICLES; i++) {
+    particles.push({
+      x: mouthX,
+      y: mouthY + rand(-s, s),
+      vx: c.facing * rand(60, 140) + rand(-10, 10),
+      vy: rand(-30, 10),
+      life: 0,
+      max: rand(0.35, 0.7),
+      size: s,
+      color: colors[i % colors.length]!,
+      gravity: -40,
+    });
+  }
+}
+
+function updateFlyer(c: Critter, dt: number, perches: Perch[], particles: Particle[]): void {
+  c.phase += dt * 3;
+  switch (c.state) {
+    case 'roam': {
+      c.timer -= dt;
+      const remaining = moveToward(c, dt, c.sprite.speed);
+      c.y += Math.sin(c.phase) * 14 * dt;
+      clampToViewport(c);
+      emitTrail(c, particles, dt);
+      if (c.sprite.breathesFire) {
+        c.fireClock -= dt;
+        if (c.fireClock <= 0) {
+          c.fireClock = rand(5, 11);
+          emitFire(c, particles);
+        }
+      }
+      if (remaining < 10 || c.timer <= 0) {
+        const roll = Math.random();
+        const perch = roll < 0.5 ? pickPerch(c, perches, 520) : null;
+        if (perch) {
+          startApproach(c, perch);
+        } else if (c.sprite.trail && roll < 0.75) {
+          const target = pickPerch(c, perches, 420);
+          if (target) {
+            c.perch = target;
+            c.state = 'orbit';
+            c.timer = rand(2.5, 5);
+            c.orbitRadius = Math.max(c.w, Math.min(target.w / 2, 90));
+            c.orbitAngle = Math.random() * Math.PI * 2;
+            break;
+          }
+          randomSkyTarget(c);
+          c.timer = rand(2, 5);
+        } else {
+          randomSkyTarget(c);
+          c.timer = rand(2, 5);
+        }
+      }
+      break;
+    }
+    case 'approach': {
+      c.timer -= dt;
+      const p = c.perch;
+      if (!p || !refreshPerch(p) || c.timer <= 0) {
+        c.perch = null;
+        c.state = 'roam';
+        randomSkyTarget(c);
+        c.timer = rand(2, 5);
+        break;
+      }
+      c.tx = p.x + Math.min(c.perchOffset, Math.max(0, p.w - c.w));
+      c.ty = restingY(c, p);
+      const remaining = moveToward(c, dt, c.sprite.speed * 1.1);
+      emitTrail(c, particles, dt);
+      if (remaining < 3) {
+        c.x = c.tx;
+        c.y = c.ty;
+        c.state = 'perch';
+        c.timer = rand(2.5, 7);
+      }
+      break;
+    }
+    case 'perch': {
+      c.timer -= dt;
+      const p = c.perch;
+      if (!p || !refreshPerch(p) || c.timer <= 0) {
+        c.perch = null;
+        c.state = 'roam';
+        randomSkyTarget(c);
+        c.ty = Math.min(c.ty, Math.max(0, c.y - 60));
+        c.timer = rand(2, 5);
+        break;
+      }
+      c.x = p.x + Math.min(c.perchOffset, Math.max(0, p.w - c.w));
+      c.y = restingY(c, p);
+      break;
+    }
+    case 'orbit': {
+      c.timer -= dt;
+      const p = c.perch;
+      if (!p || !refreshPerch(p) || c.timer <= 0) {
+        c.perch = null;
+        c.state = 'roam';
+        randomSkyTarget(c);
+        c.timer = rand(2, 5);
+        break;
+      }
+      const prevX = c.x;
+      c.orbitAngle += dt * (c.sprite.speed / Math.max(40, c.orbitRadius)) * 1.4;
+      const cx = p.x + p.w / 2;
+      const cy = p.y + Math.min(p.h / 2, 24);
+      c.x = cx + Math.cos(c.orbitAngle) * c.orbitRadius - c.w / 2;
+      c.y = cy + Math.sin(c.orbitAngle) * c.orbitRadius * 0.45 - c.h / 2;
+      if (Math.abs(c.x - prevX) > 0.5) c.facing = c.x > prevX ? 1 : -1;
+      clampToViewport(c);
+      emitTrail(c, particles, dt);
+      break;
+    }
+    default:
+      c.state = 'roam';
+      randomSkyTarget(c);
+  }
+}
+
+function landSomewhere(c: Critter, perches: Perch[]): void {
+  const below = surfacesFor(c, perches).filter((p) => p.y >= c.y + c.h - 4);
+  const target = below.length > 0 ? below[Math.floor(Math.random() * below.length)]! : floorPerch();
+  c.perchOffset = Math.min(Math.max(c.x - target.x, 0), Math.max(0, target.w - c.w));
+  startHop(c, target);
+  if (c.hop) c.hop.arc = 0;
+}
+
+function updateGround(c: Critter, dt: number, perches: Perch[]): void {
+  switch (c.state) {
+    case 'walk': {
+      const p = c.perch;
+      if (!p || !refreshPerch(p)) {
+        landSomewhere(c, perches);
+        break;
+      }
+      c.timer -= dt;
+      c.x += c.facing * c.sprite.speed * dt;
+      c.y = restingY(c, p);
+      const minX = p.x;
+      const maxX = p.x + p.w - c.w;
+      let atEdge = false;
+      if (c.x <= minX) {
+        c.x = minX;
+        atEdge = true;
+      } else if (c.x >= maxX) {
+        c.x = maxX;
+        atEdge = true;
+      }
+      c.perchOffset = c.x - p.x;
+      if (atEdge || c.timer <= 0) {
+        c.state = 'pause';
+        c.timer = atEdge ? rand(0.6, 2) : rand(0.4, 1.2);
+      }
+      break;
+    }
+    case 'pause': {
+      const p = c.perch;
+      if (!p || !refreshPerch(p)) {
+        landSomewhere(c, perches);
+        break;
+      }
+      c.x = p.x + c.perchOffset;
+      c.y = restingY(c, p);
+      c.timer -= dt;
+      if (c.timer > 0) break;
+      const next = Math.random() < 0.55 ? pickPerch(c, perches, c.sprite.hops ? 460 : 320) : null;
+      if (next) {
+        c.perchOffset = rand(0, Math.max(0, next.w - c.w));
+        startHop(c, next);
+      } else {
+        const minX = p.x;
+        const maxX = p.x + p.w - c.w;
+        if (c.x <= minX + 1) c.facing = 1;
+        else if (c.x >= maxX - 1) c.facing = -1;
+        else if (Math.random() < 0.4) c.facing = c.facing === 1 ? -1 : 1;
+        c.state = 'walk';
+        c.timer = rand(2, 6);
+      }
+      break;
+    }
+    case 'hop': {
+      const hop = c.hop;
+      if (!hop) {
+        c.state = 'walk';
+        break;
+      }
+      if (!refreshPerch(hop.to)) {
+        c.hop = null;
+        c.perch = floorPerch();
+        landSomewhere(c, perches);
+        break;
+      }
+      hop.x1 = hop.to.x + Math.min(Math.max(c.perchOffset, 0), Math.max(0, hop.to.w - c.w));
+      hop.y1 = restingY(c, hop.to);
+      hop.t = Math.min(1, hop.t + dt / hop.dur);
+      const t = hop.t;
+      const ease = hop.arc > 0 ? t : t * t * (3 - 2 * t);
+      c.x = hop.x0 + (hop.x1 - hop.x0) * ease;
+      c.y = hop.y0 + (hop.y1 - hop.y0) * ease - hop.arc * Math.sin(Math.PI * t);
+      if (t >= 1) {
+        c.perch = hop.to;
+        c.perchOffset = c.x - hop.to.x;
+        c.hop = null;
+        c.state = 'walk';
+        c.timer = rand(2, 6);
+      }
+      break;
+    }
+    default:
+      c.state = 'walk';
+  }
+}
+
+function advanceFrame(c: Critter, dt: number): void {
+  const resting = c.state === 'perch' || c.state === 'pause';
+  const period = resting ? c.sprite.frameTime * (c.sprite.kind === 'flyer' ? 5 : 1e9) : c.sprite.frameTime;
+  c.frameClock += dt;
+  if (c.frameClock >= period) {
+    c.frameClock = 0;
+    c.frame = (c.frame + 1) % c.sprite.frames.length;
+  }
+  if (resting && c.sprite.kind !== 'flyer') c.frame = 0;
+}
+
+function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
+  const x = Math.round(c.x);
+  const y = Math.round(c.y);
+  if (c.sprite.glow) {
+    const cx = x + c.w / 2;
+    const cy = y + c.h / 2;
+    const r = Math.max(c.w, c.h) * 0.9;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, c.sprite.glow);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  const frames = c.frames[c.facing === 1 ? 0 : 1];
+  const img = frames[c.frame] ?? frames[0];
+  if (img) ctx.drawImage(img, x, y);
+}
+
+/**
+ * Pixel-art companions that roam the window: fae perch on headings and circle them, goblins walk
+ * the tops of cards and hop between them, dragons circle high and breathe the odd ember.
+ * Purely decorative; disabled by Settings → Animations off or Companions → None.
+ */
+export default function PixelCritters() {
+  const [motion, setMotion] = useState<MotionPref>(() => getStoredMotion());
+  const [genre, setGenre] = useState<CritterGenre>(() => getStoredCritters());
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const onMotion = (e: Event) => {
+      const d = (e as CustomEvent<MotionPref>).detail;
+      if (d === 'on' || d === 'off') setMotion(d);
+    };
+    const onCritters = (e: Event) => {
+      const d = (e as CustomEvent<CritterGenre>).detail;
+      if (typeof d === 'string') setGenre(d);
+    };
+    window.addEventListener(MOTION_EVENT, onMotion);
+    window.addEventListener(CRITTERS_EVENT, onCritters);
+    return () => {
+      window.removeEventListener(MOTION_EVENT, onMotion);
+      window.removeEventListener(CRITTERS_EVENT, onCritters);
+    };
+  }, []);
+
+  const active = motion === 'on' && genre !== 'off';
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const critters = pickCast(genre)
+      .map((id) => makeCritter(id))
+      .filter((c): c is Critter => c !== null);
+    const particles: Particle[] = [];
+    let perches: Perch[] = [];
+    let perchClock = 0;
+    let perchesDirty = true;
+    let last: number | null = null;
+    let raf = 0;
+    let disposed = false;
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      perchesDirty = true;
+    };
+
+    const markDirty = () => {
+      perchesDirty = true;
+    };
+    const onVisibility = () => {
+      last = null;
+    };
+
+    const tick = (now: number) => {
+      if (disposed) return;
+      raf = window.requestAnimationFrame(tick);
+      if (document.hidden) {
+        last = null;
+        return;
+      }
+      if (last === null) {
+        last = now;
+        return;
+      }
+      const dt = Math.min(MAX_DT, (now - last) / 1000);
+      last = now;
+
+      perchClock += dt;
+      if (perchesDirty || perchClock >= PERCH_REFRESH_SECONDS) {
+        perches = collectPerches();
+        perchClock = 0;
+        perchesDirty = false;
+      }
+
+      for (const c of critters) {
+        if (c.sprite.kind === 'flyer') updateFlyer(c, dt, perches, particles);
+        else updateGround(c, dt, perches);
+        advanceFrame(c, dt);
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]!;
+        p.life += dt;
+        if (p.life >= p.max) {
+          particles.splice(i, 1);
+          continue;
+        }
+        p.vy += p.gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      for (const p of particles) {
+        ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
+        ctx.fillStyle = p.color;
+        const s = Math.round(p.size);
+        ctx.fillRect(Math.round(p.x / s) * s, Math.round(p.y / s) * s, s, s);
+      }
+      ctx.globalAlpha = 1;
+      for (const c of critters) drawCritter(ctx, c);
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+    window.addEventListener('scroll', markDirty, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
+    raf = window.requestAnimationFrame(tick);
+
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', markDirty, { capture: true });
+      document.removeEventListener('visibilitychange', onVisibility);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [active, genre]);
+
+  if (!active) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="wz-critters pointer-events-none fixed inset-0 z-[5]"
+      aria-hidden
+    />
+  );
+}

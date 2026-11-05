@@ -4,12 +4,17 @@ import './index.css';
 import App from './App';
 import useStore from './store/useStore';
 import { loadFromFile } from './store/useStore';
-import { initMotion, initTheme } from './theme';
+import { fetchSavedPreferences, initMotion, initTheme, setCritters, setMotion, setTheme } from './theme';
 
 initTheme();
 initMotion();
 
-loadFromFile().then((fileData) => {
+Promise.all([loadFromFile(), fetchSavedPreferences()]).then(([fileData, prefs]) => {
+  if (prefs) {
+    setTheme(prefs.theme);
+    setMotion(prefs.motion);
+    setCritters(prefs.critters);
+  }
   if (fileData) {
     useStore.getState()._hydrateFromFile(fileData);
     console.log('[WURLDING] Loaded data from file server');

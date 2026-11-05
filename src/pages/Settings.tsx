@@ -1,49 +1,159 @@
-import { useEffect, useState } from 'react';
-import { Settings as SettingsIcon, Moon, Sun, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Settings as SettingsIcon, Moon, Sun, Sparkles, BookOpen, Ghost } from 'lucide-react';
+import { WHATS_NEW } from '../data/whatsNew';
+import { CRITTERS, CRITTER_GENRES } from '../data/pixelCritters';
+import PixelSpritePreview from '../components/PixelSpritePreview';
 import {
+  CRITTERS_EVENT,
   MOTION_EVENT,
   THEME_EVENT,
+  getStoredCritters,
   getStoredMotion,
   getStoredTheme,
-  setMotion,
-  setTheme,
+  previewCritters,
+  previewMotion,
+  previewTheme,
+  savePreferences,
+  type AppPreferences,
   type AppTheme,
+  type CritterGenre,
   type MotionPref,
 } from '../theme';
+import { isCritterGenre } from '../data/pixelCritters';
+
+function formatEntryDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) return iso;
+  return new Date(year, month - 1, day).toLocaleDateString();
+}
+
+function readCurrent(): AppPreferences {
+  return { theme: getStoredTheme(), motion: getStoredMotion(), critters: getStoredCritters() };
+}
+
+function samePrefs(a: AppPreferences, b: AppPreferences): boolean {
+  return a.theme === b.theme && a.motion === b.motion && a.critters === b.critters;
+}
+
+/** Apply a draft to this window only (nothing is written until Save). */
+function previewAll(prefs: AppPreferences): void {
+  previewTheme(prefs.theme);
+  previewMotion(prefs.motion);
+  previewCritters(prefs.critters);
+}
 
 export default function Settings() {
-  const [theme, setThemeState] = useState<AppTheme>(() => getStoredTheme());
-  const [motion, setMotionState] = useState<MotionPref>(() => getStoredMotion());
+  const [saved, setSaved] = useState<AppPreferences>(() => readCurrent());
+  const [draft, setDraft] = useState<AppPreferences>(() => readCurrent());
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const applyingLocal = useRef(false);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const savedRef = useRef(saved);
+  const draftRef = useRef(draft);
 
   useEffect(() => {
-    const onTheme = (e: Event) => {
-      const detail = (e as CustomEvent<AppTheme>).detail;
-      if (detail === 'light' || detail === 'dark') setThemeState(detail);
-    };
-    const onMotion = (e: Event) => {
-      const detail = (e as CustomEvent<MotionPref>).detail;
-      if (detail === 'on' || detail === 'off') setMotionState(detail);
-    };
-    window.addEventListener(THEME_EVENT, onTheme);
-    window.addEventListener(MOTION_EVENT, onMotion);
+    savedRef.current = saved;
+    draftRef.current = draft;
+  }, [saved, draft]);
+
+  useEffect(() => {
+    mountedRef.current = true;
     return () => {
-      window.removeEventListener(THEME_EVENT, onTheme);
-      window.removeEventListener(MOTION_EVENT, onMotion);
+      mountedRef.current = false;
+      if (savingRef.current) return;
+      // Leaving without saving puts the window back to the last saved look.
+      if (!samePrefs(savedRef.current, draftRef.current)) previewAll(savedRef.current);
     };
   }, []);
 
-  const choose = (next: AppTheme) => {
-    setTheme(next);
-    setThemeState(next);
+  useEffect(() => {
+    // The desktop menu (or another window) changed a preference: treat it as the new saved state.
+    const onTheme = (e: Event) => {
+      if (applyingLocal.current) return;
+      const detail = (e as CustomEvent<AppTheme>).detail;
+      if (detail !== 'light' && detail !== 'dark') return;
+      setDraft((d) => ({ ...d, theme: detail }));
+      setSaved((s) => ({ ...s, theme: detail }));
+      setSaveState('idle');
+    };
+    const onMotion = (e: Event) => {
+      if (applyingLocal.current) return;
+      const detail = (e as CustomEvent<MotionPref>).detail;
+      if (detail !== 'on' && detail !== 'off') return;
+      setDraft((d) => ({ ...d, motion: detail }));
+      setSaved((s) => ({ ...s, motion: detail }));
+      setSaveState('idle');
+    };
+    const onCritters = (e: Event) => {
+      if (applyingLocal.current) return;
+      const detail = (e as CustomEvent<CritterGenre>).detail;
+      if (!isCritterGenre(detail)) return;
+      setDraft((d) => ({ ...d, critters: detail }));
+      setSaved((s) => ({ ...s, critters: detail }));
+      setSaveState('idle');
+    };
+    window.addEventListener(THEME_EVENT, onTheme);
+    window.addEventListener(MOTION_EVENT, onMotion);
+    window.addEventListener(CRITTERS_EVENT, onCritters);
+    return () => {
+      window.removeEventListener(THEME_EVENT, onTheme);
+      window.removeEventListener(MOTION_EVENT, onMotion);
+      window.removeEventListener(CRITTERS_EVENT, onCritters);
+    };
+  }, []);
+
+  const chooseTheme = (next: AppTheme) => {
+    if (next === draft.theme) return;
+    applyingLocal.current = true;
+    previewTheme(next);
+    applyingLocal.current = false;
+    setDraft((d) => ({ ...d, theme: next }));
+    setSaveState('idle');
   };
 
   const toggleMotion = () => {
-    const next: MotionPref = motion === 'on' ? 'off' : 'on';
-    setMotion(next);
-    setMotionState(next);
+    const next: MotionPref = draft.motion === 'on' ? 'off' : 'on';
+    applyingLocal.current = true;
+    previewMotion(next);
+    applyingLocal.current = false;
+    setDraft((d) => ({ ...d, motion: next }));
+    setSaveState('idle');
   };
 
-  const motionOn = motion === 'on';
+  const chooseCritters = (next: CritterGenre) => {
+    if (next === draft.critters) return;
+    applyingLocal.current = true;
+    previewCritters(next);
+    applyingLocal.current = false;
+    setDraft((d) => ({ ...d, critters: next }));
+    setSaveState('idle');
+  };
+
+  const save = async () => {
+    if (saveState === 'saving') return;
+    const next = draftRef.current;
+    savingRef.current = true;
+    setSaveState('saving');
+    applyingLocal.current = true;
+    const ok = await savePreferences(next);
+    applyingLocal.current = false;
+    savingRef.current = false;
+    if (!mountedRef.current) {
+      if (!ok) previewAll(savedRef.current);
+      return;
+    }
+    if (!ok) {
+      setSaveState('error');
+      return;
+    }
+    setSaved(next);
+    setSaveState('saved');
+  };
+
+  const motionOn = draft.motion === 'on';
+  const dirty = !samePrefs(draft, saved);
 
   return (
     <div className="relative mx-auto max-w-2xl min-h-full">
@@ -67,7 +177,7 @@ export default function Settings() {
             </h2>
             <p className="text-sm text-mist">
               Light mode uses a soft off-white background that is easier on the eyes for long sessions.
-              In the desktop app you can also change this under Settings → Appearance.
+              The desktop menu under Settings saves a choice immediately.
             </p>
           </div>
 
@@ -75,10 +185,10 @@ export default function Settings() {
             <button
               type="button"
               role="radio"
-              aria-checked={theme === 'light'}
-              onClick={() => choose('light')}
+              aria-checked={draft.theme === 'light'}
+              onClick={() => chooseTheme('light')}
               className={`flex items-start gap-3 rounded-lg border p-4 text-left transition ${
-                theme === 'light'
+                draft.theme === 'light'
                   ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
                   : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
               }`}
@@ -95,10 +205,10 @@ export default function Settings() {
             <button
               type="button"
               role="radio"
-              aria-checked={theme === 'dark'}
-              onClick={() => choose('dark')}
+              aria-checked={draft.theme === 'dark'}
+              onClick={() => chooseTheme('dark')}
               className={`flex items-start gap-3 rounded-lg border p-4 text-left transition ${
-                theme === 'dark'
+                draft.theme === 'dark'
                   ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
                   : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
               }`}
@@ -147,8 +257,109 @@ export default function Settings() {
           <p className="text-xs text-mist/80">
             {motionOn
               ? 'On — Wurlding will sparkle a little. If your system asks for reduced motion this stays off until you enable it here.'
-              : 'Off — all decorative motion is disabled. Functional transitions are kept short.'}
+              : 'Off — all decorative motion is disabled, including pixel companions. Functional transitions are kept short.'}
           </p>
+        </section>
+
+        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="critters-heading">
+          <div>
+            <h2 id="critters-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
+              <Ghost className="h-5 w-5 text-fey" aria-hidden />
+              Pixel companions
+            </h2>
+            <p className="text-sm text-mist">
+              Little 16-bit creatures that wander the window: perching on headings, strolling along
+              the tops of cards, hopping between panels, and circling your work. Pick a genre to choose
+              who shows up.
+              {!motionOn && ' They stay hidden while animations are off.'}
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Pixel companion genre">
+            {CRITTER_GENRES.map((genre) => {
+              const selected = draft.critters === genre.id;
+              const preview = Array.from(new Set(genre.cast)).slice(0, 3);
+              return (
+                <button
+                  key={genre.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => chooseCritters(genre.id)}
+                  className={`flex flex-col gap-3 rounded-lg border p-4 text-left transition ${
+                    selected
+                      ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
+                      : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
+                  }`}
+                >
+                  <span className="flex min-h-[44px] items-end gap-3" aria-hidden>
+                    {preview.length === 0 ? (
+                      <span className="text-xs uppercase tracking-[0.2em] text-mist">motes only</span>
+                    ) : (
+                      preview.map((id) => (
+                        <PixelSpritePreview key={id} sprite={CRITTERS[id]} scale={2} animate={selected && motionOn} />
+                      ))
+                    )}
+                  </span>
+                  <span>
+                    <span className="block font-medium text-moonlight">{genre.label}</span>
+                    <span className="mt-1 block text-sm text-mist">{genre.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-mist" role="status">
+            {saveState === 'saving' && 'Saving preferences…'}
+            {saveState === 'saved' && 'Preferences saved. Wurlding will open with this look next time.'}
+            {saveState === 'error' && 'Could not save preferences. Keep this window open and try again.'}
+            {saveState === 'idle' && dirty && 'Save to keep this theme, animation, and companion choice the next time you open Wurlding.'}
+            {saveState === 'idle' && !dirty && 'Saved appearance, animations, and companions are used the next time you open Wurlding.'}
+          </p>
+          <button
+            type="button"
+            className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => void save()}
+            disabled={!dirty || saveState === 'saving'}
+          >
+            Save preferences
+          </button>
+        </div>
+
+        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="updates-heading">
+          <div>
+            <h2 id="updates-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
+              <BookOpen className="h-5 w-5 text-arcane" aria-hidden />
+              Updates
+            </h2>
+            <p className="text-sm text-mist">
+              A log of what changed in each version. It stays here in Settings.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {WHATS_NEW.map((entry) => (
+              <article key={entry.version} className="rounded-lg border border-dusk/60 bg-abyss/40 p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-[Cinzel] text-lg font-semibold text-moonlight">{entry.title}</h3>
+                  <span className="text-xs tabular-nums text-mist">v{entry.version}</span>
+                </div>
+                <p className="mt-1 text-xs text-mist">
+                  <time dateTime={entry.date} className="tabular-nums">
+                    {formatEntryDate(entry.date)}
+                  </time>
+                </p>
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-silver">
+                  {entry.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
         </section>
       </div>
     </div>

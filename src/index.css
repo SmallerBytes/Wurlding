@@ -317,6 +317,13 @@ html[data-motion='on'] .wz-mote::after {
 }
 html[data-motion='off'] .wz-motes { display: none; }
 
+/* Pixel companions roaming over the page (rendered by <PixelCritters />) */
+.wz-critters {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+html[data-motion='off'] .wz-critters { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion='on']) *,
   html:not([data-motion='on']) *::before,

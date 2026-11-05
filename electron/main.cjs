@@ -1,5 +1,6 @@
+const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron');
 const { pathToFileURL } = require('url');
 
 let serverStarted = false;
@@ -26,48 +27,87 @@ let downloadProgressWindow = null;
 let currentAppTheme = 'light';
 /** Whimsical animations preference mirrored from the renderer (`on` | `off`). */
 let currentMotion = 'on';
+/** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
+let currentCritters = 'fae';
 
-function applyMotionInAllWindows(pref) {
-  const safe = pref === 'off' ? 'off' : 'on';
-  const script = `(function () {
-    try {
-      localStorage.setItem('wurlding:motion', ${JSON.stringify(safe)});
-      document.documentElement.setAttribute('data-motion', ${JSON.stringify(safe)});
-      window.dispatchEvent(new CustomEvent('wurlding:motion', { detail: ${JSON.stringify(safe)} }));
-    } catch (e) {}
-  })();`;
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    win.webContents.executeJavaScript(script).catch(() => {});
+const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie'];
+
+const revealedWindows = new WeakSet();
+
+function getDefaultAppDataRoot() {
+  if (process.platform === 'win32') {
+    return (
+      process.env.LOCALAPPDATA ||
+      process.env.APPDATA ||
+      path.join(process.env.USERPROFILE || __dirname, 'AppData', 'Local')
+    );
+  }
+  if (process.platform === 'darwin') {
+    return path.join(process.env.HOME || __dirname, 'Library', 'Application Support');
+  }
+  return (
+    process.env.XDG_DATA_HOME ||
+    path.join(process.env.HOME || __dirname, '.local', 'share')
+  );
+}
+
+function preferencesFilePath() {
+  const profile = (process.env.WURLDING_PROFILE || 'prod').trim() || 'prod';
+  const root = process.env.DATA_ROOT && process.env.DATA_ROOT.trim()
+    ? process.env.DATA_ROOT.trim()
+    : path.join(getDefaultAppDataRoot(), 'Wurlding', 'profiles', profile);
+  return path.join(root, 'preferences.json');
+}
+
+function readDiskPreferences() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(preferencesFilePath(), 'utf8'));
+    const theme = raw?.theme === 'dark' || raw?.theme === 'light' ? raw.theme : null;
+    const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
+    if (!theme || !motion) return null;
+    const critters = CRITTER_GENRES.includes(raw?.critters) ? raw.critters : currentCritters;
+    return { theme, motion, critters };
+  } catch {
+    return null;
   }
 }
 
-function setAppMotion(pref) {
-  const next = pref === 'off' ? 'off' : 'on';
-  if (currentMotion === next) return;
-  currentMotion = next;
-  applyMotionInAllWindows(next);
-  createApplicationMenu();
+function writeDiskPreferences(prefs) {
+  const file = preferencesFilePath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(prefs, null, 2)}\n`, 'utf8');
 }
 
-function themeBackgroundColor(theme) {
-  return theme === 'light' ? '#f4f1ea' : '#0a0a0f';
+function currentPreferences() {
+  return { theme: currentAppTheme, motion: currentMotion, critters: currentCritters };
 }
 
-function applyThemeInAllWindows(theme) {
-  const safe = theme === 'light' ? 'light' : 'dark';
-  const bg = themeBackgroundColor(safe);
-  const script = `(function () {
+function isAppWindow(win) {
+  return Boolean(win) && !win.isDestroyed() && win !== downloadProgressWindow;
+}
+
+function prefsScript(theme, motion, critters) {
+  const safeCritters = CRITTER_GENRES.includes(critters) ? critters : 'fae';
+  return `(function () {
     try {
-      localStorage.setItem('wurlding:theme', ${JSON.stringify(safe)});
-      document.documentElement.setAttribute('data-theme', ${JSON.stringify(safe)});
-      document.documentElement.style.colorScheme = ${JSON.stringify(safe)};
-      window.dispatchEvent(new CustomEvent('wurlding:theme', { detail: ${JSON.stringify(safe)} }));
+      localStorage.setItem('wurlding:theme', ${JSON.stringify(theme)});
+      localStorage.setItem('wurlding:motion', ${JSON.stringify(motion)});
+      localStorage.setItem('wurlding:critters', ${JSON.stringify(safeCritters)});
+      document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});
+      document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
+      document.documentElement.setAttribute('data-motion', ${JSON.stringify(motion)});
+      window.dispatchEvent(new CustomEvent('wurlding:theme', { detail: ${JSON.stringify(theme)} }));
+      window.dispatchEvent(new CustomEvent('wurlding:motion', { detail: ${JSON.stringify(motion)} }));
+      window.dispatchEvent(new CustomEvent('wurlding:critters', { detail: ${JSON.stringify(safeCritters)} }));
     } catch (e) {}
   })();`;
+}
 
+function pushPrefsToAllWindows() {
+  const script = prefsScript(currentAppTheme, currentMotion, currentCritters);
+  const bg = themeBackgroundColor(currentAppTheme);
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
+    if (!isAppWindow(win)) continue;
     try {
       win.setBackgroundColor(bg);
     } catch {
@@ -77,12 +117,34 @@ function applyThemeInAllWindows(theme) {
   }
 }
 
+function setAppMotion(pref) {
+  const next = pref === 'off' ? 'off' : 'on';
+  if (currentMotion === next) return;
+  currentMotion = next;
+  writeDiskPreferences(currentPreferences());
+  pushPrefsToAllWindows();
+  createApplicationMenu();
+}
+
+function themeBackgroundColor(theme) {
+  return theme === 'light' ? '#f4f1ea' : '#0a0a0f';
+}
+
 function setAppTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   if (currentAppTheme === next) return;
   currentAppTheme = next;
-  applyThemeInAllWindows(next);
+  writeDiskPreferences(currentPreferences());
+  pushPrefsToAllWindows();
   createApplicationMenu();
+}
+
+function applySavedPreferencesFromDisk() {
+  const disk = readDiskPreferences();
+  if (!disk) return;
+  currentAppTheme = disk.theme;
+  currentMotion = disk.motion;
+  currentCritters = disk.critters;
 }
 
 function syncThemeFromRenderer(win) {
@@ -94,17 +156,17 @@ function syncThemeFromRenderer(win) {
           var t = localStorage.getItem('wurlding:theme');
           var m = localStorage.getItem('wurlding:motion');
           return {
-            theme: t === 'light' || t === 'dark' ? t : 'light',
-            motion: m === 'off' ? 'off' : 'on',
+            theme: t === 'light' || t === 'dark' ? t : null,
+            motion: m === 'on' || m === 'off' ? m : null,
           };
-        } catch (e) { return { theme: 'light', motion: 'on' }; }
+        } catch (e) { return { theme: null, motion: null }; }
       })()`,
     )
     .then((prefs) => {
-      const nextTheme = prefs?.theme === 'dark' ? 'dark' : 'light';
-      const nextMotion = prefs?.motion === 'off' ? 'off' : 'on';
+      const nextTheme = prefs?.theme === 'dark' || prefs?.theme === 'light' ? prefs.theme : null;
+      const nextMotion = prefs?.motion === 'on' || prefs?.motion === 'off' ? prefs.motion : null;
       let changed = false;
-      if (currentAppTheme !== nextTheme) {
+      if (nextTheme && currentAppTheme !== nextTheme) {
         currentAppTheme = nextTheme;
         changed = true;
         try {
@@ -113,7 +175,7 @@ function syncThemeFromRenderer(win) {
           // ignore
         }
       }
-      if (currentMotion !== nextMotion) {
+      if (nextMotion && currentMotion !== nextMotion) {
         currentMotion = nextMotion;
         changed = true;
       }
@@ -184,13 +246,45 @@ function setDownloadProgressPercent(percent) {
     .catch(() => {});
 }
 
+function revealWithSavedPrefs(win) {
+  if (!win || win.isDestroyed() || revealedWindows.has(win)) return;
+  revealedWindows.add(win);
+
+  const disk = readDiskPreferences();
+  const apply = disk
+    ? win.webContents.executeJavaScript(prefsScript(disk.theme, disk.motion, disk.critters)).then(() => {
+        currentAppTheme = disk.theme;
+        currentMotion = disk.motion;
+        currentCritters = disk.critters;
+        try {
+          win.setBackgroundColor(themeBackgroundColor(disk.theme));
+        } catch {
+          // ignore
+        }
+      })
+    : Promise.resolve();
+
+  const showTimer = setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+  }, 4000);
+
+  apply.catch(() => {}).finally(() => {
+    clearTimeout(showTimer);
+    if (win.isDestroyed()) return;
+    syncThemeFromRenderer(win);
+    if (!win.isVisible()) win.show();
+  });
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
+    show: false,
     backgroundColor: themeBackgroundColor(currentAppTheme),
     icon: path.join(__dirname, '..', 'build', 'app-icon.png'),
     webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -204,11 +298,14 @@ function createWindow() {
     win.loadFile(indexPath);
   }
 
-  win.webContents.on('did-finish-load', () => {
-    syncThemeFromRenderer(win);
+  const reveal = () => revealWithSavedPrefs(win);
+  win.once('ready-to-show', reveal);
+  win.webContents.on('did-finish-load', reveal);
+  win.webContents.on('did-fail-load', () => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
   });
   win.on('focus', () => {
-    syncThemeFromRenderer(win);
+    if (revealedWindows.has(win)) syncThemeFromRenderer(win);
   });
 }
 
@@ -508,9 +605,34 @@ function createApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+ipcMain.on('preferences-saved', (_event, prefs) => {
+  const theme = prefs?.theme === 'dark' || prefs?.theme === 'light' ? prefs.theme : currentAppTheme;
+  const motion = prefs?.motion === 'on' || prefs?.motion === 'off' ? prefs.motion : currentMotion;
+  const critters = CRITTER_GENRES.includes(prefs?.critters) ? prefs.critters : currentCritters;
+  currentAppTheme = theme;
+  currentMotion = motion;
+  currentCritters = critters;
+  try {
+    writeDiskPreferences(currentPreferences());
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[WURLDING] Failed to mirror preferences:', err);
+  }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!isAppWindow(win)) continue;
+    try {
+      win.setBackgroundColor(themeBackgroundColor(theme));
+    } catch {
+      // ignore
+    }
+  }
+  createApplicationMenu();
+});
+
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.wurlding.app');
   await startServer();
+  applySavedPreferencesFromDisk();
   createApplicationMenu();
   setupAutoUpdater();
   createWindow();

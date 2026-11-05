@@ -7,9 +7,20 @@ export type WhatsNewEntry = {
 
 /**
  * Keep newest entries first.
- * Shown on first launch after updating (once per version).
+ * Shown as the updates log on the Settings page.
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.1.10',
+    date: '2026-11-05',
+    title: 'Settings, updates log, and pixel companions',
+    bullets: [
+      'Update notes live in Settings instead of a pop-up on every launch.',
+      'Save preferences keeps light/dark mode, animations, and companion choices for the next time you open Wurlding.',
+      'Pixel companions: pick a genre in Settings and 16-bit creatures roam the window — perching on cards, hopping between panels, and circling your work.',
+      'Casts include Fae court, Dragon’s roost, Goblin warren, Wild meadow, and a full menagerie.',
+    ],
+  },
   {
     version: '0.1.9',
     date: '2026-09-25',

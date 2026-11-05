@@ -38,6 +38,7 @@ const DATA_DIR =
 
 const LEGACY_DATA_FILE = path.join(DATA_DIR, 'wurld-data.json');
 const DATA_FILE = path.join(DATA_DIR, 'wurlding-data.json');
+const PREFS_FILE = path.join(DATA_DIR, 'preferences.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const IMAGES_DIR = path.join(DATA_DIR, 'images');
 const PORT = Number.parseInt(process.env.PORT || '', 10) || 3001;
@@ -64,6 +65,28 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
   } catch {
     console.error('[WURLDING] Failed to migrate legacy data file');
   }
+}
+
+const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie'];
+
+function readPreferences() {
+  if (!fs.existsSync(PREFS_FILE)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf-8'));
+    const theme = raw?.theme === 'dark' || raw?.theme === 'light' ? raw.theme : null;
+    const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
+    if (!theme || !motion) return null;
+    const prefs = { theme, motion };
+    if (CRITTER_GENRES.includes(raw?.critters)) prefs.critters = raw.critters;
+    return prefs;
+  } catch {
+    console.error('[WURLDING] Failed to read preferences file');
+    return null;
+  }
+}
+
+function writePreferences(prefs) {
+  fs.writeFileSync(PREFS_FILE, `${JSON.stringify(prefs, null, 2)}\n`, 'utf-8');
 }
 
 function readData() {
@@ -438,6 +461,31 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/api/images', express.static(IMAGES_DIR));
+
+app.get('/api/preferences', (_req, res) => {
+  res.json({ ok: true, data: readPreferences() });
+});
+
+app.put('/api/preferences', (req, res) => {
+  const theme = req.body?.theme === 'dark' || req.body?.theme === 'light' ? req.body.theme : null;
+  const motion = req.body?.motion === 'on' || req.body?.motion === 'off' ? req.body.motion : null;
+  if (!theme || !motion) {
+    return res.status(400).json({ ok: false, error: 'Expected theme (light|dark) and motion (on|off).' });
+  }
+  const critters = req.body?.critters;
+  if (critters !== undefined && !CRITTER_GENRES.includes(critters)) {
+    return res.status(400).json({ ok: false, error: `Expected critters to be one of ${CRITTER_GENRES.join(', ')}.` });
+  }
+  try {
+    const prefs = { theme, motion };
+    if (critters !== undefined) prefs.critters = critters;
+    writePreferences(prefs);
+    res.json({ ok: true, data: prefs });
+  } catch (err) {
+    console.error('[WURLDING] Preferences save error:', err);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
 
 app.get('/api/data', (_req, res) => {
   res.json({ ok: true, data: readData() });
