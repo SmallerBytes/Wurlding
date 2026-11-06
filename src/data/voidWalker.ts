@@ -1,8 +1,9 @@
 /**
- * The Void Walker companion — PNG frame-sequence atlas.
- * Frames live in /public/critters/void-walker/{walk|attack}/…
+ * The Void Walker companion — PNG walk/idle + GIF sword-unsheath flourish.
+ * Frames live in /public/critters/void-walker/{walk|idle}/… and attack/south.gif
  */
 
+import { parseGIF, decompressFrames } from 'gifuct-js';
 import { facingFromDelta, type BearFacing } from './alligatorBear';
 
 export type VoidFacing = BearFacing;
@@ -24,28 +25,31 @@ export const VOID_ATTACK_FACINGS: VoidFacing[] = ['south'];
 
 export { facingFromDelta };
 
-export const VOID_WALKER_SIZE = 48;
+export const VOID_WALKER_SIZE = 68;
 export const VOID_WALKER_SCALE = 2;
 export const VOID_WALKER_FRAME_TIME = 0.12;
-export const VOID_WALKER_ATLAS_REV = 2;
+/** Sword-unsheath GIF frame delay (200ms). */
+export const VOID_ATTACK_FRAME_TIME = 0.2;
+/** Draw the sword-unsheath flourish larger than the walk box. */
+export const VOID_ATTACK_DRAW_SCALE = 1.28;
+export const VOID_WALKER_ATLAS_REV = 10;
 
 const WALK_FRAME_COUNT = 8;
-const ATTACK_FRAME_COUNT = 15;
+const IDLE_FRAME_COUNT = 8;
 
 export function attackFacing(facing: VoidFacing): VoidFacing {
   return VOID_ATTACK_FACINGS.includes(facing) ? facing : 'south';
 }
 
-function walkFrameUrl(facing: VoidFacing, index: number): string {
+function frameUrl(pose: 'walk' | 'idle', facing: VoidFacing, index: number): string {
   const base = import.meta.env.BASE_URL || '/';
   const n = String(index).padStart(3, '0');
-  return `${base}critters/void-walker/walk/${facing}/frame_${n}.png`;
+  return `${base}critters/void-walker/${pose}/${facing}/frame_${n}.png`;
 }
 
-function attackFrameUrl(facing: VoidFacing, index: number): string {
+function attackGifUrl(facing: VoidFacing): string {
   const base = import.meta.env.BASE_URL || '/';
-  const n = String(index).padStart(3, '0');
-  return `${base}critters/void-walker/attack/${facing}/frame_${n}.png`;
+  return `${base}critters/void-walker/attack/${attackFacing(facing)}.gif`;
 }
 
 const animCache = new Map<string, HTMLCanvasElement[]>();
@@ -69,36 +73,101 @@ async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
   return canvas;
 }
 
+async function loadFrameSequence(
+  pose: 'walk' | 'idle',
+  facing: VoidFacing,
+  count: number,
+): Promise<HTMLCanvasElement[]> {
+  const key = `r${VOID_WALKER_ATLAS_REV}:${pose}:${facing}`;
+  const cached = animCache.get(key);
+  if (cached) return cached;
+
+  const frames = (
+    await Promise.all(Array.from({ length: count }, (_, i) => loadPng(frameUrl(pose, facing, i))))
+  ).filter((f): f is HTMLCanvasElement => f !== null);
+
+  if (frames.length) animCache.set(key, frames);
+  return frames;
+}
+
+async function loadAttackGif(facing: VoidFacing): Promise<HTMLCanvasElement[]> {
+  const f = attackFacing(facing);
+  const key = `r${VOID_WALKER_ATLAS_REV}:attack:${f}`;
+  const cached = animCache.get(key);
+  if (cached) return cached;
+  if (typeof document === 'undefined') return [];
+
+  let buffer: ArrayBuffer;
+  try {
+    const res = await fetch(attackGifUrl(f));
+    if (!res.ok) return [];
+    buffer = await res.arrayBuffer();
+  } catch {
+    return [];
+  }
+
+  try {
+    const gif = parseGIF(buffer);
+    const frames = decompressFrames(gif, true);
+    if (!frames.length) return [];
+
+    const width = gif.lsd?.width || frames[0]!.dims.width;
+    const height = gif.lsd?.height || frames[0]!.dims.height;
+    const out: HTMLCanvasElement[] = [];
+
+    const stage = document.createElement('canvas');
+    stage.width = width;
+    stage.height = height;
+    const stageCtx = stage.getContext('2d');
+    if (!stageCtx) return [];
+    stageCtx.imageSmoothingEnabled = false;
+
+    for (const frame of frames) {
+      const { left, top, width: fw, height: fh } = frame.dims;
+      const disposal = frame.disposalType;
+      const patch = new ImageData(new Uint8ClampedArray(frame.patch), fw, fh);
+      const patchCanvas = document.createElement('canvas');
+      patchCanvas.width = fw;
+      patchCanvas.height = fh;
+      const patchCtx = patchCanvas.getContext('2d');
+      if (!patchCtx) continue;
+      patchCtx.putImageData(patch, 0, 0);
+      stageCtx.drawImage(patchCanvas, left, top);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(stage, 0, 0);
+      out.push(canvas);
+
+      if (disposal === 2) {
+        stageCtx.clearRect(left, top, fw, fh);
+      }
+    }
+
+    if (out.length) animCache.set(key, out);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export async function loadVoidFrames(pose: VoidPose, facing: VoidFacing): Promise<HTMLCanvasElement[]> {
   if (pose === 'idle') {
-    const walk = await loadVoidFrames('walk', facing);
+    const idle = await loadFrameSequence('idle', facing, IDLE_FRAME_COUNT);
+    if (idle.length) return idle;
+    const walk = await loadFrameSequence('walk', facing, WALK_FRAME_COUNT);
     return walk.length ? [walk[0]!] : [];
   }
 
   if (pose === 'attack') {
-    const f = attackFacing(facing);
-    const key = `attack:${f}`;
-    const cached = animCache.get(key);
-    if (cached) return cached;
-    const frames = (
-      await Promise.all(
-        Array.from({ length: ATTACK_FRAME_COUNT }, (_, i) => loadPng(attackFrameUrl(f, i))),
-      )
-    ).filter((x): x is HTMLCanvasElement => x !== null);
-    if (frames.length) animCache.set(key, frames);
-    return frames;
+    return loadAttackGif(facing);
   }
 
-  const key = `walk:${facing}`;
-  const cached = animCache.get(key);
-  if (cached) return cached;
-  const frames = (
-    await Promise.all(
-      Array.from({ length: WALK_FRAME_COUNT }, (_, i) => loadPng(walkFrameUrl(facing, i))),
-    )
-  ).filter((x): x is HTMLCanvasElement => x !== null);
-  if (frames.length) animCache.set(key, frames);
-  return frames;
+  return loadFrameSequence('walk', facing, WALK_FRAME_COUNT);
 }
 
 export async function preloadVoidWalker(): Promise<Map<string, HTMLCanvasElement[]>> {
@@ -106,10 +175,9 @@ export async function preloadVoidWalker(): Promise<Map<string, HTMLCanvasElement
   await Promise.all(
     VOID_FACINGS.map(async (facing) => {
       const walk = await loadVoidFrames('walk', facing);
-      if (walk.length) {
-        map.set(`walk:${facing}`, walk);
-        map.set(`idle:${facing}`, [walk[0]!]);
-      }
+      if (walk.length) map.set(`walk:${facing}`, walk);
+      const idle = await loadVoidFrames('idle', facing);
+      if (idle.length) map.set(`idle:${facing}`, idle);
     }),
   );
   const attack = await loadVoidFrames('attack', 'south');

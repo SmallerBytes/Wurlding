@@ -26,6 +26,10 @@ export default defineConfig(({ command }) => ({
         '**/This_emerald-green_wyvern_features_an_elongated_py (1)/**',
         '**/necromancer/**',
         '**/a_human_warrior (1)/**',
+        '**/a_human_warrior (2)/**',
+        '**/Make_a_green_goblin_that/**',
+        '**/Fae_Girl/**',
+        '**/Ragnok/**',
       ],
     },
     proxy: {

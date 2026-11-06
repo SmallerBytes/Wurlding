@@ -67,7 +67,7 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
   }
 }
 
-const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 function readPreferences() {
   if (!fs.existsSync(PREFS_FILE)) return null;
@@ -77,7 +77,8 @@ function readPreferences() {
     const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
     if (!theme || !motion) return null;
     const prefs = { theme, motion };
-    if (CRITTER_GENRES.includes(raw?.critters)) prefs.critters = raw.critters;
+    const critters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
+    if (CRITTER_GENRES.includes(critters)) prefs.critters = critters;
     return prefs;
   } catch {
     console.error('[WURLDING] Failed to read preferences file');

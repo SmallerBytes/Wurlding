@@ -14,7 +14,7 @@ export const CRITTERS_STORAGE_KEY = 'wurlding:critters';
 export const CRITTERS_EVENT = 'wurlding:critters';
 
 export const DEFAULT_THEME: AppTheme = 'dark';
-export const DEFAULT_CRITTERS: CritterGenre = 'fae';
+export const DEFAULT_CRITTERS: CritterGenre = 'fae-princess';
 
 export function isAppTheme(value: unknown): value is AppTheme {
   return value === 'dark' || value === 'light';
@@ -104,6 +104,8 @@ function isMotionPref(value: unknown): value is MotionPref {
 export function getStoredCritters(): CritterGenre {
   try {
     const raw = localStorage.getItem(CRITTERS_STORAGE_KEY);
+    // Fae Court was replaced by Fae Princess.
+    if (raw === 'fae') return 'fae-princess';
     if (isCritterGenre(raw)) return raw;
   } catch {
     // ignore
@@ -139,7 +141,12 @@ export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
       theme: data.theme,
       motion: data.motion,
       // Older preference files predate companions; fall back to the default cast.
-      critters: isCritterGenre(data.critters) ? data.critters : DEFAULT_CRITTERS,
+      critters:
+        data.critters === 'fae'
+          ? 'fae-princess'
+          : isCritterGenre(data.critters)
+            ? data.critters
+            : DEFAULT_CRITTERS,
     };
   } catch {
     return null;

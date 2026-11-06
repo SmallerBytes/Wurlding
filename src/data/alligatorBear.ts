@@ -17,7 +17,19 @@ export type BearFacing =
   | 'south-west';
 
 /** sleep = lie-down; sleep-idle = held still; wake = get-up; jump = hop between perches. */
-export type BearPose = 'idle' | 'walk' | 'jump' | 'sleep' | 'sleep-idle' | 'wake' | 'roar';
+export type BearPose =
+  | 'idle'
+  | 'walk'
+  | 'jump'
+  | 'sleep'
+  | 'sleep-idle'
+  | 'wake'
+  | 'roar'
+  | 'kick'
+  | 'mask'
+  | 'launch'
+  | 'kiss'
+  | 'aura';
 
 export const BEAR_FACINGS: BearFacing[] = [
   'south',
@@ -74,7 +86,7 @@ export const ALLIGATOR_BEAR_FRAME_TIME = 0.2;
 /** How long he holds the sleeping still after the lie-down GIF finishes. */
 export const ALLIGATOR_BEAR_SLEEP_HOLD = 15;
 /** Bump when atlas contents change so PixelCritters remounts and re-preloads. */
-export const ALLIGATOR_BEAR_ATLAS_REV = 9;
+export const ALLIGATOR_BEAR_ATLAS_REV = 10;
 
 export function bearSpriteUrl(pose: BearPose, facing: BearFacing): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -308,8 +320,8 @@ export async function loadBearAnim(pose: BearPose, facing: BearFacing): Promise<
  * On-screen size of the sleep hold vs a normal companion draw (1 = full size).
  * 0.6 = 40% smaller than the original full-size pose.
  */
-/** ~20% larger than the previous 0.72 hold size. */
-export const SLEEP_IDLE_DRAW_SCALE = 0.86;
+/** Sleep hold draw size relative to the companion box. */
+export const SLEEP_IDLE_DRAW_SCALE = 1.2;
 
 /**
  * Sleep hold still — last frame of the lie-down GIF (not the 32×32 sleep PNG,

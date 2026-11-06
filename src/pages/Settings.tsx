@@ -274,7 +274,11 @@ export default function Settings() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Pixel companion genre">
+          <div
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+            role="radiogroup"
+            aria-label="Pixel companion genre"
+          >
             {visibleCritterGenres().map((genre) => {
               const selected = draft.critters === genre.id;
               const preview = Array.from(new Set(genre.cast)).slice(0, 3);
@@ -285,24 +289,29 @@ export default function Settings() {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => chooseCritters(genre.id)}
-                  className={`flex flex-col gap-3 rounded-lg border p-4 text-left transition ${
+                  className={`flex h-full min-h-[148px] flex-col gap-2 rounded-lg border p-3 text-left transition ${
                     selected
                       ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
                       : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
                   }`}
                 >
-                  <span className="flex min-h-[44px] items-end gap-3" aria-hidden>
+                  <span className="flex h-12 items-end gap-2" aria-hidden>
                     {preview.length === 0 ? (
                       <span className="text-xs uppercase tracking-[0.2em] text-mist">motes only</span>
                     ) : (
                       preview.map((id) => (
-                        <PixelSpritePreview key={id} sprite={CRITTERS[id]} scale={2} animate={selected && motionOn} />
+                        <PixelSpritePreview
+                          key={id}
+                          sprite={CRITTERS[id]}
+                          displaySize={48}
+                          animate={selected && motionOn}
+                        />
                       ))
                     )}
                   </span>
-                  <span>
+                  <span className="flex min-h-0 flex-1 flex-col">
                     <span className="block font-medium text-moonlight">{genre.label}</span>
-                    <span className="mt-1 block text-sm text-mist">{genre.description}</span>
+                    <span className="mt-1 line-clamp-3 text-sm text-mist">{genre.description}</span>
                   </span>
                 </button>
               );

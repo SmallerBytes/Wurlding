@@ -28,9 +28,9 @@ let currentAppTheme = 'dark';
 /** Whimsical animations preference mirrored from the renderer (`on` | `off`). */
 let currentMotion = 'on';
 /** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
-let currentCritters = 'fae';
+let currentCritters = 'fae-princess';
 
-const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 const revealedWindows = new WeakSet();
 
@@ -65,7 +65,8 @@ function readDiskPreferences() {
     const theme = raw?.theme === 'dark' || raw?.theme === 'light' ? raw.theme : null;
     const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
     if (!theme || !motion) return null;
-    const critters = CRITTER_GENRES.includes(raw?.critters) ? raw.critters : currentCritters;
+    const rawCritters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
+    const critters = CRITTER_GENRES.includes(rawCritters) ? rawCritters : currentCritters;
     return { theme, motion, critters };
   } catch {
     return null;
@@ -87,7 +88,7 @@ function isAppWindow(win) {
 }
 
 function prefsScript(theme, motion, critters) {
-  const safeCritters = CRITTER_GENRES.includes(critters) ? critters : 'fae';
+  const safeCritters = CRITTER_GENRES.includes(critters) ? critters : 'fae-princess';
   return `(function () {
     try {
       localStorage.setItem('wurlding:theme', ${JSON.stringify(theme)});

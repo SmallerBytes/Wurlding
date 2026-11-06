@@ -21,15 +21,17 @@ export type CritterId =
   | 'alligator-bear'
   | 'crabacus'
   | 'emerald-wyvern'
-  | 'void-walker';
+  | 'void-walker'
+  | 'goblin-priest'
+  | 'fae-princess'
+  | 'ragnok';
 
 export type CritterGenre =
   | 'off'
-  | 'fae'
-  | 'dragons'
-  | 'goblins'
+  | 'fae-princess'
+  | 'goblin-priest'
+  | 'ragnok'
   | 'wilds'
-  | 'menagerie'
   | 'alligator-bear'
   | 'crabacus'
   | 'emerald-wyvern'
@@ -37,11 +39,10 @@ export type CritterGenre =
 
 export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'off',
-  'fae',
-  'dragons',
-  'goblins',
+  'fae-princess',
+  'goblin-priest',
+  'ragnok',
   'wilds',
-  'menagerie',
   'alligator-bear',
   'crabacus',
   'emerald-wyvern',
@@ -570,7 +571,7 @@ const EMERALD_WYVERN: CritterSprite = {
   speed: 40,
   hops: false,
   imageAtlas: true,
-  atlasSize: 48,
+  atlasSize: 104,
   palette: {},
   frames: [['.']],
 };
@@ -585,7 +586,56 @@ const VOID_WALKER: CritterSprite = {
   speed: 38,
   hops: false,
   imageAtlas: true,
-  atlasSize: 48,
+  atlasSize: 68,
+  palette: {},
+  frames: [['.']],
+};
+
+/** Goblin Warrior Priest — fight-idle / kick / mask atlas. */
+const GOBLIN_PRIEST: CritterSprite = {
+  id: 'goblin-priest',
+  name: 'Goblin Warrior Priest',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 46,
+  hops: true,
+  imageAtlas: true,
+  atlasSize: 64,
+  palette: {},
+  frames: [['.']],
+};
+
+/** Fae Princess — launch → fly, with a south-facing kiss. */
+const FAE_PRINCESS: CritterSprite = {
+  id: 'fae-princess',
+  name: 'Fae Princess',
+  kind: 'flyer',
+  scale: 2,
+  frameTime: 0.08,
+  speed: 72,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 68,
+  trail: '#f9a8d4',
+  glow: 'rgba(249, 168, 212, 0.3)',
+  palette: {},
+  frames: [['.']],
+};
+
+/** Ragnok the Hoarder — walk / idle + orange flame burst. */
+const RAGNOK: CritterSprite = {
+  id: 'ragnok',
+  name: 'Ragnok the Hoarder',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 40,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 68,
+  trail: '#fb923c',
+  glow: 'rgba(251, 146, 60, 0.28)',
   palette: {},
   frames: [['.']],
 };
@@ -604,6 +654,9 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   crabacus: CRABACUS,
   'emerald-wyvern': EMERALD_WYVERN,
   'void-walker': VOID_WALKER,
+  'goblin-priest': GOBLIN_PRIEST,
+  'fae-princess': FAE_PRINCESS,
+  ragnok: RAGNOK,
 };
 
 export interface CritterGenreInfo {
@@ -625,38 +678,34 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
     count: 0,
   },
   {
-    id: 'fae',
-    label: 'Fae court',
-    description: 'A fairy, a pixie, and a wisp sprite flit about and perch on your headings.',
-    cast: ['fairy', 'pixie', 'sprite'],
-    count: 3,
+    id: 'fae-princess',
+    label: 'Fae Princess',
+    description:
+      'A winged fae princess who launches into each new heading, flutters on the breeze, blows kisses as she drifts south, and gathers a glowing aura when she perches.',
+    cast: ['fae-princess'],
+    count: 1,
   },
   {
-    id: 'dragons',
-    label: "Dragon's roost",
-    description: 'A dragon and a wyvern circle high and settle on the widest panels.',
-    cast: ['dragon', 'wyvern'],
-    count: 2,
+    id: 'goblin-priest',
+    label: 'Goblin Warrior Priest',
+    description:
+      'A masked green goblin priest of war — he prowls in a fight stance, lashes out with a roundhouse, or tears the mask away before vanishing back into a run.',
+    cast: ['goblin-priest'],
+    count: 1,
   },
   {
-    id: 'goblins',
-    label: 'Goblin warren',
-    description: 'Goblins scurry along the tops of your cards and hop between them.',
-    cast: ['goblin', 'goblin'],
-    count: 2,
+    id: 'ragnok',
+    label: 'Ragnok the Hoarder',
+    description:
+      'A squat dragon-hoarder who patrols your pages for shiny things — and when the stash feels threatened, he ignites a burst of bright orange flame.',
+    cast: ['ragnok'],
+    count: 1,
   },
   {
     id: 'wilds',
     label: 'Wild meadow',
     description: 'Butterflies drift, a beetle trundles, and a snake slithers along the ledges.',
     cast: ['butterfly', 'snake', 'beetle', 'butterfly'],
-    count: 4,
-  },
-  {
-    id: 'menagerie',
-    label: 'Full menagerie',
-    description: 'A little of everything, picked at random each time you open Wurlding.',
-    cast: ['fairy', 'pixie', 'sprite', 'goblin', 'wyvern', 'dragon', 'butterfly', 'beetle', 'snake'],
     count: 4,
   },
   {

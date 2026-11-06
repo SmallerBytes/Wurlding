@@ -22,7 +22,30 @@ import {
 } from '../data/alligatorBear';
 import { CRABACUS_ATLAS_REV, preloadCrabacus } from '../data/crabacus';
 import { EMERALD_WYVERN_ATLAS_REV, preloadEmeraldWyvern } from '../data/emeraldWyvern';
-import { VOID_WALKER_ATLAS_REV, preloadVoidWalker } from '../data/voidWalker';
+import {
+  FAE_AURA_AFTER,
+  FAE_LAUNCH_COOLDOWN,
+  FAE_PRINCESS_ATLAS_REV,
+  FAE_SOUTH_KISS_AFTER,
+  preloadFaePrincess,
+} from '../data/faePrincess';
+import {
+  fightIdleFacing,
+  GOBLIN_MASK_FRAME_TIME,
+  GOBLIN_PRIEST_ATLAS_REV,
+  preloadGoblinPriest,
+} from '../data/goblinPriest';
+import {
+  RAGNOK_ATLAS_REV,
+  RAGNOK_FLAME_FRAME_TIME,
+  preloadRagnok,
+} from '../data/ragnokHoarder';
+import {
+  VOID_ATTACK_DRAW_SCALE,
+  VOID_ATTACK_FRAME_TIME,
+  VOID_WALKER_ATLAS_REV,
+  preloadVoidWalker,
+} from '../data/voidWalker';
 import {
   CRITTERS,
   getCritterGenre,
@@ -33,7 +56,7 @@ import {
 } from '../data/pixelCritters';
 
 /** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
-const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}`;
+const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}`;
 
 /** Page furniture a companion may land on, walk along, or circle. */
 const PERCH_SELECTOR = [
@@ -106,6 +129,16 @@ interface Critter {
   bearPose?: BearPose;
   roarTimer?: number;
   roarHold?: number;
+  /** Void Walker: face south idle briefly before the sword GIF. */
+  flourishWindup?: number;
+  /** Fae Princess: committed travel facing (launch + matching fly). */
+  faePrevFacing?: BearFacing;
+  /** Fae Princess: seconds spent flying south before a kiss. */
+  faeSouthClock?: number;
+  /** Fae Princess: lockout after a launch so orbit ticks don't teleport her. */
+  faeLaunchCool?: number;
+  /** Fae Princess: seconds perched before the aura cycle. */
+  faeAuraClock?: number;
   sleepPause?: boolean;
   /** Seconds until an atlas companion with sleep extras wants another nap. */
   sleepCooldown?: number;
@@ -301,8 +334,18 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     bearFacing: Math.random() < 0.5 ? 'east' : 'west',
     bearPose: 'idle',
     roarTimer:
-      sprite.atlasExtras || sprite.id === 'void-walker' ? rand(5, 12) : undefined,
+      sprite.atlasExtras ||
+      sprite.id === 'void-walker' ||
+      sprite.id === 'goblin-priest' ||
+      sprite.id === 'ragnok'
+        ? rand(5, 12)
+        : undefined,
     roarHold: 0,
+    flourishWindup: 0,
+    faePrevFacing: undefined,
+    faeSouthClock: 0,
+    faeLaunchCool: 0,
+    faeAuraClock: 0,
     sleepPause: false,
     sleepPhase: undefined,
     // Sleep cycle is Alligator Bear only.
@@ -516,6 +559,11 @@ function updateFlyer(c: Critter, dt: number, perches: Perch[], particles: Partic
       c.x = cx + Math.cos(c.orbitAngle) * c.orbitRadius - c.w / 2;
       c.y = cy + Math.sin(c.orbitAngle) * c.orbitRadius * 0.45 - c.h / 2;
       if (Math.abs(c.x - prevX) > 0.5) c.facing = c.x > prevX ? 1 : -1;
+      if (c.sprite.imageAtlas) {
+        const dx = Math.cos(c.orbitAngle);
+        const dy = Math.sin(c.orbitAngle) * 0.45;
+        c.bearFacing = facingFromDelta(dx, dy);
+      }
       clampToViewport(c);
       emitTrail(c, particles, dt);
       break;
@@ -720,6 +768,29 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
     );
   }
   if (pose === 'roar') return c.bearFrames.get(`roar:${roarGifFacing(facing)}`);
+  if (pose === 'kick') {
+    return c.bearFrames.get(`kick:${facing}`) ?? c.bearFrames.get('kick:south');
+  }
+  if (pose === 'mask') {
+    return c.bearFrames.get('mask:south') ?? c.bearFrames.get(`mask:${facing}`);
+  }
+  if (pose === 'launch') {
+    return c.bearFrames.get(`launch:${facing}`) ?? c.bearFrames.get('launch:south');
+  }
+  if (pose === 'kiss') {
+    return c.bearFrames.get('kiss:south') ?? c.bearFrames.get(`kiss:${facing}`);
+  }
+  if (pose === 'aura') {
+    return c.bearFrames.get(`aura:${facing}`) ?? c.bearFrames.get('aura:south');
+  }
+  if (pose === 'idle' && c.sprite.id === 'goblin-priest') {
+    const snap = fightIdleFacing(facing);
+    return (
+      c.bearFrames.get(`idle:${snap}`) ??
+      c.bearFrames.get('idle:south') ??
+      c.bearFrames.get(`walk:${facing}`)
+    );
+  }
   return (
     c.bearFrames.get(`${pose}:${facing}`) ??
     c.bearFrames.get(`idle:${facing}`) ??
@@ -730,11 +801,174 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
 }
 
 function syncBearPose(c: Critter, dt: number): void {
-  // Roar cycle — hold through one full GIF (~1.8s) facing his current direction.
+  // Fae Princess: launch on a new travel heading → fly the SAME heading until the next turn;
+  // kiss while flying south; aura while perched. Orbit updates facing with no launch.
+  if (c.sprite.id === 'fae-princess') {
+    c.faeLaunchCool = Math.max(0, (c.faeLaunchCool ?? 0) - dt);
+    const traveling = c.state === 'roam' || c.state === 'approach';
+    const moving = traveling || c.state === 'orbit';
+    if (
+      (c.roarHold ?? 0) > 0 &&
+      (c.bearPose === 'launch' || c.bearPose === 'kiss' || c.bearPose === 'aura')
+    ) {
+      c.roarHold = (c.roarHold ?? 0) - dt;
+      // Keep the oneshot facing stable while movement keeps updating bearFacing.
+      if (c.bearPose === 'kiss') c.bearFacing = 'south';
+      else if (c.bearPose === 'launch' && c.faePrevFacing) c.bearFacing = c.faePrevFacing;
+      if ((c.roarHold ?? 0) <= 0) {
+        const finished = c.bearPose;
+        c.roarHold = 0;
+        if (finished === 'launch') c.faeLaunchCool = FAE_LAUNCH_COOLDOWN;
+        // Launch → fly keeps the same committed facing (east launch → east fly, etc.).
+        if (finished === 'launch' && c.faePrevFacing) c.bearFacing = c.faePrevFacing;
+        else if (finished !== 'launch') c.faePrevFacing = undefined;
+        c.bearPose = moving ? 'walk' : 'idle';
+        c.faeSouthClock = 0;
+        c.faeAuraClock = 0;
+        c.frame = 0;
+        c.frameClock = 0;
+      }
+      return;
+    }
+    if (moving) {
+      const liveFacing = c.bearFacing ?? 'south';
+      // Orbit may free-turn; travel locks facing so fly matches the last launch.
+      if (c.state === 'orbit') {
+        c.faePrevFacing = liveFacing;
+        c.bearPose = 'walk';
+        c.faeAuraClock = 0;
+        c.faeSouthClock = liveFacing === 'south' ? (c.faeSouthClock ?? 0) + dt : 0;
+        return;
+      }
+      const canLaunch =
+        (c.faeLaunchCool ?? 0) <= 0 &&
+        Boolean(c.faePrevFacing) &&
+        c.faePrevFacing !== liveFacing;
+      if (canLaunch) {
+        const hold =
+          (c.bearFrames?.get(`launch:${liveFacing}`)?.length ?? 9) * (c.sprite.frameTime || 0.08);
+        c.bearPose = 'launch';
+        c.bearFacing = liveFacing;
+        c.roarHold = hold;
+        c.faePrevFacing = liveFacing;
+        c.faeSouthClock = 0;
+        c.faeAuraClock = 0;
+        c.frame = 0;
+        c.frameClock = 0;
+        return;
+      }
+      // Hold the committed travel facing through the fly loop (launch east → fly east).
+      if (!c.faePrevFacing) c.faePrevFacing = liveFacing;
+      c.bearFacing = c.faePrevFacing;
+      c.bearPose = 'walk';
+      c.faeAuraClock = 0;
+      if (c.faePrevFacing === 'south') {
+        c.faeSouthClock = (c.faeSouthClock ?? 0) + dt;
+        if ((c.faeSouthClock ?? 0) >= FAE_SOUTH_KISS_AFTER) {
+          const hold = (c.bearFrames?.get('kiss:south')?.length ?? 9) * (c.sprite.frameTime || 0.08);
+          c.bearPose = 'kiss';
+          c.bearFacing = 'south';
+          c.roarHold = hold;
+          c.faeSouthClock = 0;
+          c.frame = 0;
+          c.frameClock = 0;
+        }
+      } else {
+        c.faeSouthClock = 0;
+      }
+      return;
+    }
+    // Perched: flutter, then the glowing aura cycle.
+    const facing = c.bearFacing ?? 'south';
+    c.faePrevFacing = facing;
+    c.faeSouthClock = 0;
+    c.faeAuraClock = (c.faeAuraClock ?? 0) + dt;
+    if ((c.faeAuraClock ?? 0) >= FAE_AURA_AFTER) {
+      const auraFacingKey = facing;
+      const hold =
+        (c.bearFrames?.get(`aura:${auraFacingKey}`)?.length ?? 41) * (c.sprite.frameTime || 0.08);
+      c.bearPose = 'aura';
+      c.roarHold = hold;
+      c.faeAuraClock = 0;
+      c.frame = 0;
+      c.frameClock = 0;
+      return;
+    }
+    c.bearPose = 'idle';
+    return;
+  }
+
+  // Void Walker: south idle beat, then sword GIF, then peel off walking south.
+  if ((c.flourishWindup ?? 0) > 0) {
+    c.flourishWindup = (c.flourishWindup ?? 0) - dt;
+    c.bearFacing = 'south';
+    c.bearPose = 'idle';
+    if ((c.flourishWindup ?? 0) <= 0) {
+      c.flourishWindup = 0;
+      const flourish = (c.bearFrames?.get('roar:south')?.length ?? 12) * VOID_ATTACK_FRAME_TIME;
+      c.roarHold = flourish;
+      c.bearPose = 'roar';
+      c.frame = 0;
+      c.frameClock = 0;
+    }
+    return;
+  }
+  // One-shot flourish (sword / kick / mask) — hold through the full clip.
   if ((c.roarHold ?? 0) > 0) {
     c.roarHold = (c.roarHold ?? 0) - dt;
-    c.bearPose = 'roar';
-    c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+    if ((c.roarHold ?? 0) <= 0) {
+      c.roarHold = 0;
+      if (c.sprite.id === 'void-walker') {
+        c.bearFacing = 'south';
+        c.bearPose = 'walk';
+        c.state = 'walk';
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        c.tx = Math.min(Math.max(c.x + rand(-36, 36), 0), Math.max(0, vw - c.w));
+        c.ty = Math.min(Math.max(c.y + rand(70, 150), 0), Math.max(0, vh - c.h));
+        c.timer = rand(2.5, 4.5);
+        c.frame = 0;
+        c.frameClock = 0;
+        return;
+      }
+      if (c.sprite.id === 'ragnok') {
+        c.bearPose = 'idle';
+        c.roarTimer = rand(8, 14);
+        c.timer = Math.max(c.timer, rand(1.2, 2.4));
+        c.frame = 0;
+        c.frameClock = 0;
+        return;
+      }
+      if (c.sprite.id === 'goblin-priest') {
+        if (c.bearPose === 'mask') {
+          c.bearPose = 'walk';
+          c.state = 'walk';
+          c.timer = rand(2.5, 5);
+          c.roarTimer = rand(10, 18);
+        } else {
+          // Kick finished → back to fight stance.
+          c.bearFacing = fightIdleFacing(c.bearFacing ?? 'south');
+          c.bearPose = 'idle';
+          c.roarTimer = rand(4, 9);
+          c.timer = Math.max(c.timer, rand(1.5, 3));
+        }
+        c.frame = 0;
+        c.frameClock = 0;
+        return;
+      }
+    }
+    if (c.sprite.id === 'void-walker') {
+      c.bearPose = 'roar';
+      c.bearFacing = 'south';
+    } else if (c.sprite.id === 'ragnok') {
+      c.bearPose = 'roar';
+    } else if (c.sprite.id === 'goblin-priest') {
+      // Keep kick/mask pose while the hold runs.
+      if (c.bearPose === 'mask') c.bearFacing = 'south';
+    } else {
+      c.bearPose = 'roar';
+      c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+    }
     return;
   }
   if (c.state === 'hop') {
@@ -757,25 +991,67 @@ function syncBearPose(c: Critter, dt: number): void {
     }
     return;
   }
-  // Occasional roar / sword-draw while idling.
+  // Occasional roar / sword-draw / goblin flourish while idling.
   if (c.state === 'pause' && c.roarTimer != null) {
     c.roarTimer = (c.roarTimer ?? 8) - dt;
     if ((c.roarTimer ?? 0) <= 0) {
-      const flourishIds = new Set(['void-walker']);
-      const flourish = flourishIds.has(c.sprite.id)
-        ? (c.bearFrames?.get('roar:south')?.length ?? 12) * (c.sprite.frameTime || 0.12)
-        : 1.8;
-      c.roarHold = flourish;
-      c.roarTimer = rand(12, 20);
-      c.timer = Math.max(c.timer, flourish);
-      c.bearPose = 'roar';
-      c.bearFacing = flourishIds.has(c.sprite.id)
-        ? 'south'
-        : roarGifFacing(c.bearFacing ?? 'south');
+      const isVoid = c.sprite.id === 'void-walker';
+      const isGoblin = c.sprite.id === 'goblin-priest';
+      const isRagnok = c.sprite.id === 'ragnok';
       c.frame = 0;
       c.frameClock = 0;
+      if (isVoid) {
+        const flourish = (c.bearFrames?.get('roar:south')?.length ?? 12) * VOID_ATTACK_FRAME_TIME;
+        const windup = Math.max(1.1, (c.sprite.frameTime || 0.12) * 8);
+        c.roarTimer = rand(12, 20);
+        c.bearFacing = 'south';
+        c.bearPose = 'idle';
+        c.flourishWindup = windup;
+        c.roarHold = 0;
+        c.timer = Math.max(c.timer, windup + flourish + 0.4);
+      } else if (isRagnok) {
+        const facing = c.bearFacing ?? 'south';
+        const hold =
+          (c.bearFrames?.get(`roar:${facing}`)?.length ?? 41) * RAGNOK_FLAME_FRAME_TIME;
+        c.bearPose = 'roar';
+        c.bearFacing = facing;
+        c.roarHold = hold;
+        c.roarTimer = rand(10, 18);
+        c.timer = Math.max(c.timer, hold + 0.3);
+      } else if (isGoblin) {
+        // Fight-idle → kick → fight-idle, or fight-idle → mask → walk.
+        const doMask = Math.random() < 0.4;
+        c.bearFacing = fightIdleFacing(c.bearFacing ?? 'south');
+        if (doMask) {
+          const hold = (c.bearFrames?.get('mask:south')?.length ?? 24) * GOBLIN_MASK_FRAME_TIME;
+          c.bearPose = 'mask';
+          c.bearFacing = 'south';
+          c.roarHold = hold;
+          c.roarTimer = rand(12, 20);
+          c.timer = Math.max(c.timer, hold + 0.3);
+        } else {
+          const facing = fightIdleFacing(c.bearFacing ?? 'south');
+          const hold =
+            (c.bearFrames?.get(`kick:${facing}`)?.length ?? 7) * (c.sprite.frameTime || 0.12);
+          c.bearPose = 'kick';
+          c.bearFacing = facing;
+          c.roarHold = hold;
+          c.roarTimer = rand(12, 20);
+          c.timer = Math.max(c.timer, hold + 0.3);
+        }
+      } else {
+        const flourish = 1.8;
+        c.roarTimer = rand(12, 20);
+        c.roarHold = flourish;
+        c.timer = Math.max(c.timer, flourish);
+        c.bearPose = 'roar';
+        c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+      }
       return;
     }
+  }
+  if (c.sprite.id === 'goblin-priest' && c.state === 'pause') {
+    c.bearFacing = fightIdleFacing(c.bearFacing ?? 'south');
   }
   c.bearPose = 'idle';
 }
@@ -789,7 +1065,10 @@ function advanceFrame(c: Critter, dt: number): void {
       // Don't reset one-shot sleep/wake frames when sync re-affirms the same pose.
       const sticky =
         (prevPose === 'sleep' && c.bearPose === 'sleep') ||
-        (prevPose === 'wake' && c.bearPose === 'wake');
+        (prevPose === 'wake' && c.bearPose === 'wake') ||
+        (prevPose === 'launch' && c.bearPose === 'launch') ||
+        (prevPose === 'kiss' && c.bearPose === 'kiss') ||
+        (prevPose === 'aura' && c.bearPose === 'aura');
       if (!sticky) {
         c.frame = 0;
         c.frameClock = 0;
@@ -827,7 +1106,14 @@ function advanceFrame(c: Critter, dt: number): void {
       c.frame = 0;
       return;
     }
-    const period = c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
+    const period =
+      c.sprite.id === 'void-walker' && c.bearPose === 'roar'
+        ? VOID_ATTACK_FRAME_TIME
+        : c.sprite.id === 'ragnok' && c.bearPose === 'roar'
+          ? RAGNOK_FLAME_FRAME_TIME
+          : c.sprite.id === 'goblin-priest' && c.bearPose === 'mask'
+            ? GOBLIN_MASK_FRAME_TIME
+            : c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
     c.frameClock += dt;
     if (c.frameClock < period) return;
     c.frameClock = 0;
@@ -887,6 +1173,12 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
         }
         dw = Math.max(1, Math.round(dw));
         dh = Math.max(1, Math.round(dh));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'void-walker' && c.bearPose === 'roar') {
+        const dw = Math.max(1, Math.round(c.w * VOID_ATTACK_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * VOID_ATTACK_DRAW_SCALE));
         const dx = x + Math.floor((c.w - dw) / 2);
         const dy = y + (c.h - dh);
         ctx.drawImage(img, dx, dy, dw, dh);
@@ -1028,6 +1320,9 @@ export default function PixelCritters() {
           else if (id === 'crabacus') atlasById.set(id, await preloadCrabacus());
           else if (id === 'emerald-wyvern') atlasById.set(id, await preloadEmeraldWyvern());
           else if (id === 'void-walker') atlasById.set(id, await preloadVoidWalker());
+          else if (id === 'goblin-priest') atlasById.set(id, await preloadGoblinPriest());
+          else if (id === 'fae-princess') atlasById.set(id, await preloadFaePrincess());
+          else if (id === 'ragnok') atlasById.set(id, await preloadRagnok());
         }),
       );
       if (disposed) return;

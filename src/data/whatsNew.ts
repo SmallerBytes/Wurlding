@@ -11,6 +11,17 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.14',
+    date: '2026-11-06',
+    title: 'Fae Princess, Goblin Warrior Priest, and Ragnok',
+    bullets: [
+      'Fae Princess replaces the Fae Court — launch into each heading, flutter on the breeze, blow a kiss south, and gather a glowing aura when perched.',
+      'Goblin Warrior Priest replaces the Goblin warren — fight-idle prowls, roundhouse kicks, and a mask flourish.',
+      'New companion: Ragnok the Hoarder — walks your pages and ignites bright orange flame when the stash feels threatened.',
+      'Void Walker sword flourish now plays facing south after a short idle beat.',
+    ],
+  },
+  {
     version: '0.1.13',
     date: '2026-11-05',
     title: 'Emerald Wyvern idle polish',
@@ -36,7 +47,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       'Update notes live in Settings instead of a pop-up on every launch.',
       'Save preferences keeps light/dark mode, animations, and companion choices for the next time you open Wurlding.',
       'Pixel companions: pick a genre in Settings and 16-bit creatures roam the window — perching on cards, hopping between panels, and circling your work.',
-      'Casts include Fae court, Dragon’s roost, Goblin warren, Wild meadow, and a full menagerie.',
+      'Casts include Fae Princess, Dragon’s roost, Goblin Warrior Priest, Wild meadow, and a full menagerie.',
     ],
   },
   {
