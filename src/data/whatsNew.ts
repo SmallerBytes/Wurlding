@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.12',
+    date: '2026-11-05',
+    title: 'More companions and a darker default',
+    bullets: [
+      'New atlas companions: Crabacus, Emerald Wyvern, and The Void Walker — each with their own walk and flourish cycles.',
+      'Alligator Bear is now the Sultan of Scales, with cleaner outlines and a better sleep hold pose.',
+      'Dark mode is the default for new installs; light mode stays available in Settings.',
+    ],
+  },
+  {
     version: '0.1.10',
     date: '2026-11-05',
     title: 'Settings, updates log, and pixel companions',

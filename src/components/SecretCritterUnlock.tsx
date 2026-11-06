@@ -4,7 +4,7 @@ import { setCritters } from '../theme';
 
 /**
  * Listens for Ctrl+Shift+A+B (A and B both pressed while Ctrl and Shift are held).
- * First time: unlocks the Alligator Bear companion and summons him. Later: just summons him.
+ * First time: unlocks the Sultan of Scales companion and summons him. Later: just summons him.
  */
 export default function SecretCritterUnlock() {
   const held = useRef({ a: false, b: false });
@@ -27,7 +27,7 @@ export default function SecretCritterUnlock() {
       if (!(held.current.a && held.current.b)) return;
       const first = unlockAlligatorBear();
       setCritters('alligator-bear');
-      showToast(first ? 'Alligator Bear unlocked.' : 'Alligator Bear answers the call.');
+      showToast(first ? 'Sultan of Scales unlocked.' : 'Sultan of Scales answers the call.');
       clearChord();
     };
 

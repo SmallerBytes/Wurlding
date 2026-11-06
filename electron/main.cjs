@@ -24,13 +24,13 @@ let awaitingSilentUpdateDownload = false;
 let downloadProgressWindow = null;
 
 /** App UI theme mirrored from the renderer (`dark` | `light`). */
-let currentAppTheme = 'light';
+let currentAppTheme = 'dark';
 /** Whimsical animations preference mirrored from the renderer (`on` | `off`). */
 let currentMotion = 'on';
 /** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
 let currentCritters = 'fae';
 
-const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear'];
+const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 const revealedWindows = new WeakSet();
 

@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { loadBearFrames } from '../data/alligatorBear';
+import { loadCrabFrames } from '../data/crabacus';
+import { loadWyvernFrames } from '../data/emeraldWyvern';
+import { loadVoidFrames } from '../data/voidWalker';
 import { renderSpriteFrame, spriteSize, type CritterSprite } from '../data/pixelCritters';
 
 /** Small looping preview of one pixel companion, used on the Settings page. */
@@ -33,7 +36,14 @@ export default function PixelSpritePreview({
 
     if (sprite.imageAtlas) {
       void (async () => {
-        const frames = await loadBearFrames('idle', 'south');
+        const frames =
+          sprite.id === 'crabacus'
+            ? await loadCrabFrames('idle', 'south')
+            : sprite.id === 'emerald-wyvern'
+              ? await loadWyvernFrames('walk', 'south')
+              : sprite.id === 'void-walker'
+                ? await loadVoidFrames('walk', 'south')
+                : await loadBearFrames('idle', 'south');
         if (cancelled || !frames.length) return;
         let index = 0;
         drawImageFrame(frames[0]!);
@@ -41,7 +51,7 @@ export default function PixelSpritePreview({
         intervalId = window.setInterval(() => {
           index = (index + 1) % frames.length;
           drawImageFrame(frames[index]!);
-        }, 200);
+        }, Math.max(90, sprite.frameTime * 1000));
       })();
       return () => {
         cancelled = true;

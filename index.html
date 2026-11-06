@@ -12,7 +12,7 @@
       (function () {
         try {
           var t = localStorage.getItem('wurlding:theme');
-          if (t !== 'light' && t !== 'dark') t = 'light';
+          if (t !== 'light' && t !== 'dark') t = 'dark';
           document.documentElement.setAttribute('data-theme', t);
           document.documentElement.style.colorScheme = t;
           var m = localStorage.getItem('wurlding:motion');

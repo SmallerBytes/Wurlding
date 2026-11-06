@@ -20,6 +20,9 @@ import {
   type BearFacing,
   type BearPose,
 } from '../data/alligatorBear';
+import { CRABACUS_ATLAS_REV, preloadCrabacus } from '../data/crabacus';
+import { EMERALD_WYVERN_ATLAS_REV, preloadEmeraldWyvern } from '../data/emeraldWyvern';
+import { VOID_WALKER_ATLAS_REV, preloadVoidWalker } from '../data/voidWalker';
 import {
   CRITTERS,
   getCritterGenre,
@@ -28,6 +31,9 @@ import {
   type CritterId,
   type CritterSprite,
 } from '../data/pixelCritters';
+
+/** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
+const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}`;
 
 /** Page furniture a companion may land on, walk along, or circle. */
 const PERCH_SELECTOR = [
@@ -94,14 +100,14 @@ interface Critter {
   orbitRadius: number;
   trailClock: number;
   fireClock: number;
-  /** PNG/GIF atlas companions (Alligator Bear). Values are one or more frames. */
+  /** PNG/GIF atlas companions. Values are one or more frames. */
   bearFrames?: Map<string, HTMLCanvasElement[]>;
   bearFacing?: BearFacing;
   bearPose?: BearPose;
   roarTimer?: number;
   roarHold?: number;
   sleepPause?: boolean;
-  /** Seconds until the Alligator Bear wants another nap. */
+  /** Seconds until an atlas companion with sleep extras wants another nap. */
   sleepCooldown?: number;
   /** Lie-down → hold still → wake GIF. */
   sleepPhase?: 'lie-down' | 'hold' | 'wake';
@@ -209,6 +215,47 @@ function clampToViewport(c: Critter): void {
   c.y = Math.min(Math.max(c.y, 0), vh - c.h);
 }
 
+/** Open-floor target so walk-only atlas companions can use all 8 facings. */
+function randomFloorTarget(c: Critter): void {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const pad = 12;
+  c.tx = rand(pad, Math.max(pad + 1, vw - c.w - pad));
+  c.ty = rand(pad, Math.max(pad + 1, vh - c.h - pad));
+}
+
+/**
+ * Crabacus-style roam: pick points around the window and walk toward them so
+ * facingFromDelta sees real dx/dy (not just east/west ledge shuffles).
+ */
+function updateFloorWander(c: Critter, dt: number): void {
+  switch (c.state) {
+    case 'pause': {
+      c.timer -= dt;
+      if (c.timer > 0) break;
+      randomFloorTarget(c);
+      c.state = 'walk';
+      c.timer = rand(2.5, 6.5);
+      break;
+    }
+    case 'walk':
+    case 'roam':
+    case 'approach':
+    case 'hop':
+    default: {
+      c.state = 'walk';
+      c.timer -= dt;
+      const remaining = moveToward(c, dt, c.sprite.speed);
+      clampToViewport(c);
+      if (remaining < 10 || c.timer <= 0) {
+        c.state = 'pause';
+        c.timer = rand(0.45, 1.6);
+      }
+      break;
+    }
+  }
+}
+
 function randomSkyTarget(c: Critter): void {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -253,12 +300,17 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     bearFrames,
     bearFacing: Math.random() < 0.5 ? 'east' : 'west',
     bearPose: 'idle',
-    roarTimer: rand(5, 12),
+    roarTimer:
+      sprite.atlasExtras ||
+      sprite.id === 'void-walker' ||
+      sprite.id === 'emerald-wyvern'
+        ? rand(5, 12)
+        : undefined,
     roarHold: 0,
     sleepPause: false,
     sleepPhase: undefined,
-    // First nap comes fairly soon so the sleep cycle is easy to spot.
-    sleepCooldown: sprite.imageAtlas ? rand(6, 12) : undefined,
+    // Sleep cycle is Alligator Bear only.
+    sleepCooldown: sprite.id === 'alligator-bear' ? rand(6, 12) : undefined,
     state: sprite.kind === 'flyer' ? 'roam' : 'walk',
     timer: rand(1.5, 4),
     tx: 0,
@@ -274,6 +326,10 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
   };
   if (sprite.kind === 'flyer') {
     randomSkyTarget(c);
+  } else if (sprite.imageAtlas && !sprite.hops) {
+    // Free roam across the window so all walk facings get used.
+    randomFloorTarget(c);
+    c.perch = null;
   } else {
     c.perch = floorPerch();
     c.perchOffset = c.x - c.perch.x;
@@ -478,6 +534,16 @@ function landSomewhere(c: Critter, perches: Perch[]): void {
   const below = surfacesFor(c, perches).filter((p) => p.y >= c.y + c.h - 4);
   const target = below.length > 0 ? below[Math.floor(Math.random() * below.length)]! : floorPerch();
   c.perchOffset = Math.min(Math.max(c.x - target.x, 0), Math.max(0, target.w - c.w));
+  // Walk-only companions (Crabacus) snap onto a ledge — no hop / jump pose.
+  if (!c.sprite.hops) {
+    c.hop = null;
+    c.perch = target;
+    c.x = target.x + c.perchOffset;
+    c.y = restingY(c, target);
+    c.state = 'walk';
+    c.timer = rand(2, 6);
+    return;
+  }
   startHop(c, target);
   if (c.hop) c.hop.arc = 0;
 }
@@ -524,6 +590,11 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
   if (c.sprite.imageAtlas && !c.sleepPause && c.sleepCooldown != null) {
     c.sleepCooldown = Math.max(0, c.sleepCooldown - dt);
   }
+  // Walk-only atlas companions roam the floor in 8 directions (no ledge hopping).
+  if (c.sprite.imageAtlas && !c.sprite.hops) {
+    updateFloorWander(c, dt);
+    return;
+  }
   switch (c.state) {
     case 'walk': {
       const p = c.perch;
@@ -548,8 +619,8 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
       c.perchOffset = c.x - p.x;
       if (atEdge || c.timer <= 0) {
         c.state = 'pause';
-        // Nap when the cooldown is up (or often enough to notice); otherwise a short idle.
-        if (c.sprite.imageAtlas && (c.sleepCooldown ?? 0) <= 0) {
+        // Nap only for atlas companions that have sleep GIFs (Alligator Bear).
+        if (c.sprite.id === 'alligator-bear' && c.sleepCooldown != null && c.sleepCooldown <= 0) {
           beginBearSleep(c);
         } else {
           c.sleepPause = false;
@@ -578,7 +649,9 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
       }
       c.sleepPause = false;
       c.sleepPhase = undefined;
-      const next = Math.random() < 0.55 ? pickPerch(c, perches, c.sprite.hops ? 460 : 320) : null;
+      // Hoppers may leap to another ledge; walk-only critters stay put and turn around.
+      const next =
+        c.sprite.hops && Math.random() < 0.55 ? pickPerch(c, perches, 460) : null;
       if (next) {
         c.perchOffset = rand(0, Math.max(0, next.w - c.w));
         startHop(c, next);
@@ -617,7 +690,7 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
         c.perch = hop.to;
         c.perchOffset = c.x - hop.to.x;
         c.hop = null;
-        if (c.sprite.imageAtlas && (c.sleepCooldown ?? 0) <= 0) {
+        if (c.sprite.id === 'alligator-bear' && c.sleepCooldown != null && c.sleepCooldown <= 0) {
           c.state = 'pause';
           beginBearSleep(c);
         } else {
@@ -669,12 +742,12 @@ function syncBearPose(c: Critter, dt: number): void {
     return;
   }
   if (c.state === 'hop') {
-    c.bearPose = 'jump';
+    c.bearPose = c.sprite.hops ? 'jump' : 'walk';
     return;
   }
   if (c.state === 'walk' || c.state === 'approach') {
     c.bearPose = 'walk';
-    if (c.sprite.imageAtlas) c.roarTimer = (c.roarTimer ?? 8) - dt;
+    if (c.roarTimer != null) c.roarTimer = (c.roarTimer ?? 8) - dt;
     return;
   }
   if (c.state === 'pause' && c.sleepPause) {
@@ -688,16 +761,21 @@ function syncBearPose(c: Critter, dt: number): void {
     }
     return;
   }
-  // Occasional roar while idling on a ledge.
-  if (c.state === 'pause' && c.sprite.imageAtlas) {
+  // Occasional roar / sword-draw while idling.
+  if (c.state === 'pause' && c.roarTimer != null) {
     c.roarTimer = (c.roarTimer ?? 8) - dt;
     if ((c.roarTimer ?? 0) <= 0) {
-      // 9 frames × 200ms ≈ 1.8s.
-      c.roarHold = 1.8;
+      const flourishIds = new Set(['void-walker', 'emerald-wyvern']);
+      const flourish = flourishIds.has(c.sprite.id)
+        ? (c.bearFrames?.get('roar:south')?.length ?? 12) * (c.sprite.frameTime || 0.12)
+        : 1.8;
+      c.roarHold = flourish;
       c.roarTimer = rand(12, 20);
-      c.timer = Math.max(c.timer, 1.8);
+      c.timer = Math.max(c.timer, flourish);
       c.bearPose = 'roar';
-      c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+      c.bearFacing = flourishIds.has(c.sprite.id)
+        ? 'south'
+        : roarGifFacing(c.bearFacing ?? 'south');
       c.frame = 0;
       c.frameClock = 0;
       return;
@@ -801,9 +879,18 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
     if (img) {
       ctx.imageSmoothingEnabled = false;
       if (c.bearPose === 'sleep-idle') {
-        // 40% smaller than the normal companion box, feet on the ledge.
-        const dw = Math.max(1, Math.round(c.w * SLEEP_IDLE_DRAW_SCALE));
-        const dh = Math.max(1, Math.round(c.h * SLEEP_IDLE_DRAW_SCALE));
+        // Fit the wider lie-down frame in the companion box; keep aspect, feet on the ledge.
+        const maxW = c.w * SLEEP_IDLE_DRAW_SCALE;
+        const maxH = c.h * SLEEP_IDLE_DRAW_SCALE;
+        const aspect = img.width / Math.max(1, img.height);
+        let dw = maxW;
+        let dh = dw / aspect;
+        if (dh > maxH) {
+          dh = maxH;
+          dw = dh * aspect;
+        }
+        dw = Math.max(1, Math.round(dw));
+        dh = Math.max(1, Math.round(dh));
         const dx = x + Math.floor((c.w - dw) / 2);
         const dy = y + (c.h - dh);
         ctx.drawImage(img, dx, dy, dw, dh);
@@ -938,11 +1025,18 @@ export default function PixelCritters() {
 
     void (async () => {
       const cast = pickCast(genre);
-      const needsBear = cast.includes('alligator-bear');
-      const bearFrames = needsBear ? await preloadAlligatorBear() : undefined;
+      const atlasById = new Map<CritterId, Map<string, HTMLCanvasElement[]>>();
+      await Promise.all(
+        cast.map(async (id) => {
+          if (id === 'alligator-bear') atlasById.set(id, await preloadAlligatorBear());
+          else if (id === 'crabacus') atlasById.set(id, await preloadCrabacus());
+          else if (id === 'emerald-wyvern') atlasById.set(id, await preloadEmeraldWyvern());
+          else if (id === 'void-walker') atlasById.set(id, await preloadVoidWalker());
+        }),
+      );
       if (disposed) return;
       critters = cast
-        .map((id) => makeCritter(id, id === 'alligator-bear' ? bearFrames : undefined))
+        .map((id) => makeCritter(id, atlasById.get(id)))
         .filter((c): c is Critter => c !== null);
       raf = window.requestAnimationFrame(tick);
     })();
@@ -955,7 +1049,7 @@ export default function PixelCritters() {
       document.removeEventListener('visibilitychange', onVisibility);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [active, genre, ALLIGATOR_BEAR_ATLAS_REV]);
+  }, [active, genre, atlasRev]);
 
   if (!active) return null;
 

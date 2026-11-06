@@ -196,7 +196,7 @@ export default function Settings() {
               <span>
                 <span className="block font-medium text-moonlight">Light mode</span>
                 <span className="mt-1 block text-sm text-mist">
-                  Soft parchment off-white — comfortable for writing. The default.
+                  Soft parchment off-white — comfortable for writing.
                 </span>
               </span>
             </button>
@@ -216,7 +216,7 @@ export default function Settings() {
               <span>
                 <span className="block font-medium text-moonlight">Dark mode</span>
                 <span className="mt-1 block text-sm text-mist">
-                  Deep abyss palette — the original Wurlding look.
+                  Deep abyss palette — the original Wurlding look. The default.
                 </span>
               </span>
             </button>

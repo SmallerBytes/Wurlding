@@ -67,7 +67,7 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
   }
 }
 
-const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear'];
+const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 function readPreferences() {
   if (!fs.existsSync(PREFS_FILE)) return null;

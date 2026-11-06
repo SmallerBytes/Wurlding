@@ -13,7 +13,7 @@ export const MOTION_EVENT = 'wurlding:motion';
 export const CRITTERS_STORAGE_KEY = 'wurlding:critters';
 export const CRITTERS_EVENT = 'wurlding:critters';
 
-export const DEFAULT_THEME: AppTheme = 'light';
+export const DEFAULT_THEME: AppTheme = 'dark';
 export const DEFAULT_CRITTERS: CritterGenre = 'fae';
 
 export function isAppTheme(value: unknown): value is AppTheme {

@@ -18,7 +18,15 @@ export default defineConfig(({ command }) => ({
   server: {
     watch: {
       // Source sprite dumps (and Windows-locked GIFs) must not crash the watcher.
-      ignored: ['**/data/**', '**/Alligator Bear/**'],
+      ignored: [
+        '**/data/**',
+        '**/Alligator Bear/**',
+        '**/CrabKing/**',
+        '**/This_emerald-green_wyvern_features_an_elongated_py/**',
+        '**/This_emerald-green_wyvern_features_an_elongated_py (1)/**',
+        '**/necromancer/**',
+        '**/a_human_warrior (1)/**',
+      ],
     },
     proxy: {
       '/api': {

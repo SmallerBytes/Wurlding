@@ -18,9 +18,22 @@ export type CritterId =
   | 'butterfly'
   | 'beetle'
   | 'snake'
-  | 'alligator-bear';
+  | 'alligator-bear'
+  | 'crabacus'
+  | 'emerald-wyvern'
+  | 'void-walker';
 
-export type CritterGenre = 'off' | 'fae' | 'dragons' | 'goblins' | 'wilds' | 'menagerie' | 'alligator-bear';
+export type CritterGenre =
+  | 'off'
+  | 'fae'
+  | 'dragons'
+  | 'goblins'
+  | 'wilds'
+  | 'menagerie'
+  | 'alligator-bear'
+  | 'crabacus'
+  | 'emerald-wyvern'
+  | 'void-walker';
 
 export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'off',
@@ -30,6 +43,9 @@ export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'wilds',
   'menagerie',
   'alligator-bear',
+  'crabacus',
+  'emerald-wyvern',
+  'void-walker',
 ];
 
 export function isCritterGenre(value: unknown): value is CritterGenre {
@@ -59,10 +75,14 @@ export interface CritterSprite {
   /** Occasional ember puff from the mouth (dragons). */
   breathesFire?: boolean;
   /**
-   * Image-based companion (PNG atlas under /public). When set, `frames`/`palette` are unused
+   * Image-based companion (PNG/GIF atlas under /public). When set, `frames`/`palette` are unused
    * placeholders and PixelCritters loads the atlas instead.
    */
   imageAtlas?: boolean;
+  /** Native atlas pixel size (square). Defaults to 32 for image companions. */
+  atlasSize?: number;
+  /** Lie-down / roar cycles (Alligator Bear). Walk-only atlases leave this unset. */
+  atlasExtras?: boolean;
   /** Hidden until unlocked by a secret chord. */
   secret?: boolean;
 }
@@ -507,17 +527,65 @@ const SNAKE: CritterSprite = {
   ],
 };
 
-/** Albino swamp-crowned alligator-bear — PNG/GIF atlas companion. */
+/** Sultan of Scales — PNG/GIF atlas companion (internal id: alligator-bear). */
 const ALLIGATOR_BEAR: CritterSprite = {
   id: 'alligator-bear',
-  name: 'Alligator Bear',
+  name: 'Sultan of Scales',
   kind: 'walker',
   scale: 3,
   frameTime: 0.2, // matches walk-south.gif frame delay
   speed: 42,
   hops: true,
   imageAtlas: true,
+  atlasSize: 32,
+  atlasExtras: true,
   // Unused for image companions — kept so the ASCII renderer path stays typed.
+  palette: {},
+  frames: [['.']],
+};
+
+/** Crabacus — Crab King of the tidepools; walk-cycle GIF atlas companion. */
+const CRABACUS: CritterSprite = {
+  id: 'crabacus',
+  name: 'Crabacus',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.2, // matches walk GIF frame delay
+  speed: 36,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 64,
+  // Unused for image companions — kept so the ASCII renderer path stays typed.
+  palette: {},
+  frames: [['.']],
+};
+
+/** Emerald Wyvern — ground-crawling python-wyvern; PNG frame atlas. */
+const EMERALD_WYVERN: CritterSprite = {
+  id: 'emerald-wyvern',
+  name: 'Emerald Wyvern',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 40,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 48,
+  palette: {},
+  frames: [['.']],
+};
+
+/** The Void Walker — human warrior atlas; walk + sword-draw flourish. */
+const VOID_WALKER: CritterSprite = {
+  id: 'void-walker',
+  name: 'The Void Walker',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 38,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 48,
   palette: {},
   frames: [['.']],
 };
@@ -533,6 +601,9 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   beetle: BEETLE,
   snake: SNAKE,
   'alligator-bear': ALLIGATOR_BEAR,
+  crabacus: CRABACUS,
+  'emerald-wyvern': EMERALD_WYVERN,
+  'void-walker': VOID_WALKER,
 };
 
 export interface CritterGenreInfo {
@@ -590,15 +661,39 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
   },
   {
     id: 'alligator-bear',
-    label: 'Alligator Bear',
+    label: 'Sultan of Scales',
     description:
-      'King of the Cursed Marshlands — an albino alligator with the bulk of a bear, armored in black iron and crowned in swamp-thorn. He ruled the drowned fens until the mists swallowed his throne; now he prowls your pages, a restless sovereign looking for a realm worth claiming again.',
+      'Sultan of Scales — an albino alligator with the bulk of a bear, armored in black iron and crowned in swamp-thorn. He ruled the drowned fens until the mists swallowed his throne; now he prowls your pages, a restless sovereign looking for a realm worth claiming again.',
     cast: ['alligator-bear'],
+    count: 1,
+  },
+  {
+    id: 'crabacus',
+    label: 'Crabacus',
+    description:
+      'Crab King of the tidepools — clawed sovereign of salt and shell. He patrols your pages sideways and forward alike, clicking for a court that never quite arrives.',
+    cast: ['crabacus'],
+    count: 1,
+  },
+  {
+    id: 'emerald-wyvern',
+    label: 'Emerald Wyvern',
+    description:
+      'A low-slung emerald wyvern with a python’s body and a viper’s head — wing-knuckles scrape the ground as it prowls your pages, jade scales catching every mote of light.',
+    cast: ['emerald-wyvern'],
+    count: 1,
+  },
+  {
+    id: 'void-walker',
+    label: 'The Void Walker',
+    description:
+      'A human warrior who crossed the veil and never fully returned — steel and shadow in equal measure. He paces your pages, and when the quiet grows too long he draws his sword from nowhere.',
+    cast: ['void-walker'],
     count: 1,
   },
 ];
 
-/** Companion genre cards shown in Settings (includes Alligator Bear). */
+/** Companion genre cards shown in Settings (includes atlas companions). */
 export function visibleCritterGenres(_unlockedSecrets = true): CritterGenreInfo[] {
   return CRITTER_GENRES;
 }
@@ -610,8 +705,8 @@ export function getCritterGenre(id: CritterGenre): CritterGenreInfo {
 /** Width and height of a sprite in sprite pixels (frames are padded to the widest row). */
 export function spriteSize(sprite: CritterSprite): { w: number; h: number } {
   if (sprite.imageAtlas) {
-    // Matches ALLIGATOR_BEAR_SIZE in alligatorBear.ts
-    return { w: 32, h: 32 };
+    const n = sprite.atlasSize ?? 32;
+    return { w: n, h: n };
   }
   let w = 0;
   let h = 0;

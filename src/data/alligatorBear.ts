@@ -74,7 +74,7 @@ export const ALLIGATOR_BEAR_FRAME_TIME = 0.2;
 /** How long he holds the sleeping still after the lie-down GIF finishes. */
 export const ALLIGATOR_BEAR_SLEEP_HOLD = 15;
 /** Bump when atlas contents change so PixelCritters remounts and re-preloads. */
-export const ALLIGATOR_BEAR_ATLAS_REV = 6;
+export const ALLIGATOR_BEAR_ATLAS_REV = 9;
 
 export function bearSpriteUrl(pose: BearPose, facing: BearFacing): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -163,20 +163,6 @@ export function facingFromDelta(dx: number, dy: number): BearFacing {
   }
 }
 
-function punchBlack(canvas: HTMLCanvasElement): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    // Source sheets use a solid black backdrop — punch it out.
-    if (data[i]! < 14 && data[i + 1]! < 14 && data[i + 2]! < 14) {
-      data[i + 3] = 0;
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
 const stillCache = new Map<string, HTMLCanvasElement>();
 const animCache = new Map<string, HTMLCanvasElement[]>();
 const sleepSizeCache = new Map<BearFacing, { w: number; h: number }>();
@@ -237,12 +223,12 @@ export async function loadBearFrame(pose: BearPose, facing: BearFacing): Promise
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, 0, 0);
-  punchBlack(canvas);
+  // PNGs already carry alpha — do not punch near-black (that was eating outlines).
   stillCache.set(key, canvas);
   return canvas;
 }
 
-/** Decode an animated GIF into punched canvases (one per frame). */
+/** Decode an animated GIF into canvases (one per frame). */
 export async function loadBearAnim(pose: BearPose, facing: BearFacing): Promise<HTMLCanvasElement[] | null> {
   const key = `${pose}:${facing}`;
   const cached = animCache.get(key);
@@ -297,7 +283,7 @@ export async function loadBearAnim(pose: BearPose, facing: BearFacing): Promise<
       if (!ctx) continue;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(stage, 0, 0);
-      punchBlack(canvas);
+      // GIFs already use chroma transparency — keep near-black outline ink.
       out.push(canvas);
 
       if (disposal === 2) {
@@ -322,18 +308,27 @@ export async function loadBearAnim(pose: BearPose, facing: BearFacing): Promise<
  * On-screen size of the sleep hold vs a normal companion draw (1 = full size).
  * 0.6 = 40% smaller than the original full-size pose.
  */
-export const SLEEP_IDLE_DRAW_SCALE = 0.72;
+/** ~20% larger than the previous 0.72 hold size. */
+export const SLEEP_IDLE_DRAW_SCALE = 0.86;
 
 /**
- * Sleeping still at native resolution (same treatment as other PNG stills).
- * On-screen size is controlled by SLEEP_IDLE_DRAW_SCALE in the renderer.
+ * Sleep hold still — last frame of the lie-down GIF (not the 32×32 sleep PNG,
+ * which crops snout/tail). On-screen size uses SLEEP_IDLE_DRAW_SCALE.
  */
 export async function loadSleepIdleFrame(facing: BearFacing): Promise<HTMLCanvasElement | null> {
-  const key = `sleep-idle:${facing}:v8`;
+  const key = `sleep-idle:${facing}:v10`;
   const cached = stillCache.get(key);
   if (cached) return cached;
 
   const gifFacing = sleepGifFacing(facing);
+  const anim = await loadBearAnim('sleep', gifFacing);
+  if (anim && anim.length > 0) {
+    const last = anim[anim.length - 1]!;
+    stillCache.set(key, last);
+    return last;
+  }
+
+  // Fallback only if the sleep GIF is missing.
   const frame = await loadBearFrame('sleep-idle', facing);
   if (!frame) {
     if (facing !== gifFacing) return loadSleepIdleFrame(gifFacing);
