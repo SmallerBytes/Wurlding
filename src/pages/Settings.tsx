@@ -289,7 +289,7 @@ export default function Settings() {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => chooseCritters(genre.id)}
-                  className={`flex h-full min-h-[148px] flex-col gap-2 rounded-lg border p-3 text-left transition ${
+                  className={`flex h-full flex-col gap-2 rounded-lg border p-3 text-left transition ${
                     selected
                       ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
                       : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
@@ -309,9 +309,9 @@ export default function Settings() {
                       ))
                     )}
                   </span>
-                  <span className="flex min-h-0 flex-1 flex-col">
+                  <span className="flex flex-1 flex-col">
                     <span className="block font-medium text-moonlight">{genre.label}</span>
-                    <span className="mt-1 line-clamp-3 text-sm text-mist">{genre.description}</span>
+                    <span className="mt-1 text-sm text-mist">{genre.description}</span>
                   </span>
                 </button>
               );

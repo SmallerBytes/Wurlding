@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.15',
+    date: '2026-11-06',
+    title: 'Fae Princess sky roam, tighter cards, and app icon',
+    bullets: [
+      'Fae Princess no longer snaps onto cards or orbits — smooth sky roaming only, with midair hover for her aura.',
+      'Companion cards in Settings use one short sentence each so the grid stays compact.',
+      'Windows builds use the Wurlding icon PNG from the build folder for the app and installer.',
+    ],
+  },
+  {
     version: '0.1.14',
     date: '2026-11-06',
     title: 'Fae Princess, Goblin Warrior Priest, and Ragnok',

@@ -5,17 +5,20 @@
   "directories": {
     "output": "release"
   },
-  "icon": "build/app-icon.ico",
+  "icon": "build/app-icon.png",
   "files": [
     "dist/**",
     "server.js",
     "electron/**",
-    "package.json"
+    "package.json",
+    "build/app-icon.png",
+    "build/app-icon.ico",
+    "build/Wurlding Icon.png"
   ],
   "extraResources": [],
   "asar": true,
   "win": {
-    "icon": "build/app-icon.ico",
+    "icon": "build/app-icon.png",
     "signAndEditExecutable": false,
     "target": [
       {

@@ -465,7 +465,59 @@ function emitFire(c: Critter, particles: Particle[]): void {
   }
 }
 
+/**
+ * Fae Princess: smooth sky roam only — no perch snaps, no orbit teleports, no hops.
+ * Occasional midair hover (state `perch` without a DOM perch) so the aura can play.
+ */
+function updateFaePrincess(c: Critter, dt: number, particles: Particle[]): void {
+  c.phase += dt * 2.2;
+  // Drop any leftover orbit/approach from older movement so she never jumps onto cards.
+  if (c.state === 'orbit' || c.state === 'approach' || c.state === 'hop') {
+    c.perch = null;
+    c.hop = null;
+    c.state = 'roam';
+    randomSkyTarget(c);
+    c.timer = rand(2, 4);
+  }
+
+  if (c.state === 'perch') {
+    // Hover in place — keep current sky position; gentle bob only.
+    c.timer -= dt;
+    c.y += Math.sin(c.phase) * 5 * dt;
+    clampToViewport(c);
+    emitTrail(c, particles, dt * 0.4);
+    if (c.timer <= 0) {
+      c.state = 'roam';
+      randomSkyTarget(c);
+      c.timer = rand(2.5, 5);
+    }
+    return;
+  }
+
+  c.state = 'roam';
+  c.timer -= dt;
+  const remaining = moveToward(c, dt, c.sprite.speed);
+  c.y += Math.sin(c.phase) * 8 * dt;
+  clampToViewport(c);
+  emitTrail(c, particles, dt);
+  if (remaining < 10 || c.timer <= 0) {
+    if (Math.random() < 0.32) {
+      // Pause midair for aura / flutter — never snap to a UI ledge.
+      c.perch = null;
+      c.state = 'perch';
+      c.timer = rand(3.2, 6);
+    } else {
+      randomSkyTarget(c);
+      c.timer = rand(2.5, 5.5);
+    }
+  }
+}
+
 function updateFlyer(c: Critter, dt: number, perches: Perch[], particles: Particle[]): void {
+  if (c.sprite.id === 'fae-princess') {
+    updateFaePrincess(c, dt, particles);
+    return;
+  }
   c.phase += dt * 3;
   switch (c.state) {
     case 'roam': {
@@ -801,12 +853,11 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
 }
 
 function syncBearPose(c: Critter, dt: number): void {
-  // Fae Princess: launch on a new travel heading → fly the SAME heading until the next turn;
-  // kiss while flying south; aura while perched. Orbit updates facing with no launch.
+  // Fae Princess: launch → fly same heading; kiss while flying south; aura on midair hover.
+  // Movement is sky-roam only (no orbit/card snaps).
   if (c.sprite.id === 'fae-princess') {
     c.faeLaunchCool = Math.max(0, (c.faeLaunchCool ?? 0) - dt);
-    const traveling = c.state === 'roam' || c.state === 'approach';
-    const moving = traveling || c.state === 'orbit';
+    const moving = c.state === 'roam';
     if (
       (c.roarHold ?? 0) > 0 &&
       (c.bearPose === 'launch' || c.bearPose === 'kiss' || c.bearPose === 'aura')
@@ -832,14 +883,6 @@ function syncBearPose(c: Critter, dt: number): void {
     }
     if (moving) {
       const liveFacing = c.bearFacing ?? 'south';
-      // Orbit may free-turn; travel locks facing so fly matches the last launch.
-      if (c.state === 'orbit') {
-        c.faePrevFacing = liveFacing;
-        c.bearPose = 'walk';
-        c.faeAuraClock = 0;
-        c.faeSouthClock = liveFacing === 'south' ? (c.faeSouthClock ?? 0) + dt : 0;
-        return;
-      }
       const canLaunch =
         (c.faeLaunchCool ?? 0) <= 0 &&
         Boolean(c.faePrevFacing) &&
@@ -878,15 +921,14 @@ function syncBearPose(c: Critter, dt: number): void {
       }
       return;
     }
-    // Perched: flutter, then the glowing aura cycle.
+    // Midair hover: flutter, then the glowing aura cycle.
     const facing = c.bearFacing ?? 'south';
     c.faePrevFacing = facing;
     c.faeSouthClock = 0;
     c.faeAuraClock = (c.faeAuraClock ?? 0) + dt;
     if ((c.faeAuraClock ?? 0) >= FAE_AURA_AFTER) {
-      const auraFacingKey = facing;
       const hold =
-        (c.bearFrames?.get(`aura:${auraFacingKey}`)?.length ?? 41) * (c.sprite.frameTime || 0.08);
+        (c.bearFrames?.get(`aura:${facing}`)?.length ?? 41) * (c.sprite.frameTime || 0.08);
       c.bearPose = 'aura';
       c.roarHold = hold;
       c.faeAuraClock = 0;

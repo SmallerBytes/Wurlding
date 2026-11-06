@@ -277,13 +277,31 @@ function revealWithSavedPrefs(win) {
   });
 }
 
+/** Window / taskbar icon — always the Wurlding PNG under build/. */
+function resolveAppIconPath() {
+  const candidates = [
+    path.join(__dirname, '..', 'build', 'Wurlding Icon.png'),
+    path.join(__dirname, '..', 'build', 'app-icon.png'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'build', 'Wurlding Icon.png'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'build', 'app-icon.png'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    } catch {
+      // ignore
+    }
+  }
+  return path.join(__dirname, '..', 'build', 'app-icon.png');
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     show: false,
     backgroundColor: themeBackgroundColor(currentAppTheme),
-    icon: path.join(__dirname, '..', 'build', 'app-icon.png'),
+    icon: resolveAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,

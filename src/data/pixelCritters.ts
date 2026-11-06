@@ -673,70 +673,63 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
   {
     id: 'off',
     label: 'No companions',
-    description: 'Only the drifting motes. Nothing else wanders the window.',
+    description: 'Only drifting motes — nothing else wanders the window.',
     cast: [],
     count: 0,
   },
   {
     id: 'fae-princess',
     label: 'Fae Princess',
-    description:
-      'A winged fae princess who launches into each new heading, flutters on the breeze, blows kisses as she drifts south, and gathers a glowing aura when she perches.',
+    description: 'A winged fae who launches, flutters, and blows the odd kiss.',
     cast: ['fae-princess'],
     count: 1,
   },
   {
     id: 'goblin-priest',
     label: 'Goblin Warrior Priest',
-    description:
-      'A masked green goblin priest of war — he prowls in a fight stance, lashes out with a roundhouse, or tears the mask away before vanishing back into a run.',
+    description: 'A masked goblin priest who prowls, kicks, and sheds his mask.',
     cast: ['goblin-priest'],
     count: 1,
   },
   {
     id: 'ragnok',
     label: 'Ragnok the Hoarder',
-    description:
-      'A squat dragon-hoarder who patrols your pages for shiny things — and when the stash feels threatened, he ignites a burst of bright orange flame.',
+    description: 'A squat dragon-hoarder who bursts into bright orange flame.',
     cast: ['ragnok'],
     count: 1,
   },
   {
     id: 'wilds',
     label: 'Wild meadow',
-    description: 'Butterflies drift, a beetle trundles, and a snake slithers along the ledges.',
+    description: 'Butterflies, a beetle, and a snake along the ledges.',
     cast: ['butterfly', 'snake', 'beetle', 'butterfly'],
     count: 4,
   },
   {
     id: 'alligator-bear',
     label: 'Sultan of Scales',
-    description:
-      'Sultan of Scales — an albino alligator with the bulk of a bear, armored in black iron and crowned in swamp-thorn. He ruled the drowned fens until the mists swallowed his throne; now he prowls your pages, a restless sovereign looking for a realm worth claiming again.',
+    description: 'An armored albino alligator-bear who prowls your pages.',
     cast: ['alligator-bear'],
     count: 1,
   },
   {
     id: 'crabacus',
     label: 'Crabacus',
-    description:
-      'Crab King of the tidepools — clawed sovereign of salt and shell. He patrols your pages sideways and forward alike, clicking for a court that never quite arrives.',
+    description: 'Crab King of the tidepools, clicking sideways through your work.',
     cast: ['crabacus'],
     count: 1,
   },
   {
     id: 'emerald-wyvern',
     label: 'Emerald Wyvern',
-    description:
-      'A low-slung emerald wyvern with a python’s body and a viper’s head — wing-knuckles scrape the ground as it prowls your pages, jade scales catching every mote of light.',
+    description: 'A low-slung jade wyvern that scrapes along the ground.',
     cast: ['emerald-wyvern'],
     count: 1,
   },
   {
     id: 'void-walker',
     label: 'The Void Walker',
-    description:
-      'A human warrior who crossed the veil and never fully returned — steel and shadow in equal measure. He paces your pages, and when the quiet grows too long he draws his sword from nowhere.',
+    description: 'A veiled warrior who draws his sword when the quiet grows long.',
     cast: ['void-walker'],
     count: 1,
   },

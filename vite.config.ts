@@ -30,6 +30,7 @@ export default defineConfig(({ command }) => ({
         '**/Make_a_green_goblin_that/**',
         '**/Fae_Girl/**',
         '**/Ragnok/**',
+        '**/release/**',
       ],
     },
     proxy: {
