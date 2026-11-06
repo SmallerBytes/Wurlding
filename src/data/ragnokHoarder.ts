@@ -28,7 +28,7 @@ export const RAGNOK_SCALE = 2;
 export const RAGNOK_FRAME_TIME = 0.12;
 /** Flame-burst flourish frame delay. */
 export const RAGNOK_FLAME_FRAME_TIME = 0.09;
-export const RAGNOK_ATLAS_REV = 1;
+export const RAGNOK_ATLAS_REV = 4;
 
 const WALK_FRAME_COUNT = 8;
 const IDLE_FRAME_COUNT = 8;
@@ -70,11 +70,32 @@ async function loadFrameSequence(
   const cached = animCache.get(key);
   if (cached) return cached;
 
-  const frames = (
-    await Promise.all(Array.from({ length: count }, (_, i) => loadPng(frameUrl(pose, facing, i))))
-  ).filter((f): f is HTMLCanvasElement => f !== null);
+  // Keep frame indices stable — a dropped mid-sequence PNG used to shorten
+  // flame bursts and leave gaps that drew as nothing (Ragnok "vanishing").
+  const loaded = await Promise.all(
+    Array.from({ length: count }, async (_, i) => {
+      const url = frameUrl(pose, facing, i);
+      let canvas = await loadPng(url);
+      if (!canvas) canvas = await loadPng(url);
+      return canvas;
+    }),
+  );
+  let fallback: HTMLCanvasElement | null = null;
+  for (const canvas of loaded) {
+    if (canvas) {
+      fallback = canvas;
+      break;
+    }
+  }
+  if (!fallback) return [];
 
-  if (frames.length) animCache.set(key, frames);
+  const frames: HTMLCanvasElement[] = new Array(count);
+  for (let i = 0; i < count; i++) {
+    const canvas = loaded[i] ?? (i > 0 ? frames[i - 1] : null) ?? fallback;
+    frames[i] = canvas!;
+  }
+
+  animCache.set(key, frames);
   return frames;
 }
 

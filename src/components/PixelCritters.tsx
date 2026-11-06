@@ -139,6 +139,8 @@ interface Critter {
   faeLaunchCool?: number;
   /** Fae Princess: seconds perched before the aura cycle. */
   faeAuraClock?: number;
+  /** Ragnok: facing locked for the current flame burst. */
+  ragnokFlameFacing?: BearFacing;
   sleepPause?: boolean;
   /** Seconds until an atlas companion with sleep extras wants another nap. */
   sleepCooldown?: number;
@@ -264,6 +266,8 @@ function randomFloorTarget(c: Critter): void {
 function updateFloorWander(c: Critter, dt: number): void {
   switch (c.state) {
     case 'pause': {
+      // Don't peel out of a pause mid flame/sword/kick — that cut flourishes short.
+      if ((c.roarHold ?? 0) > 0 || (c.flourishWindup ?? 0) > 0) break;
       c.timer -= dt;
       if (c.timer > 0) break;
       randomFloorTarget(c);
@@ -346,6 +350,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     faeSouthClock: 0,
     faeLaunchCool: 0,
     faeAuraClock: 0,
+    ragnokFlameFacing: undefined,
     sleepPause: false,
     sleepPhase: undefined,
     // Sleep cycle is Alligator Bear only.
@@ -819,7 +824,18 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
       c.bearFrames.get(`sleep:${sleepFacing}`)
     );
   }
-  if (pose === 'roar') return c.bearFrames.get(`roar:${roarGifFacing(facing)}`);
+  if (pose === 'roar') {
+    // Ragnok has all 8 flame facings; bear roar GIFs do not (north remaps).
+    if (c.sprite.id === 'ragnok') {
+      const locked = c.ragnokFlameFacing ?? facing;
+      // Never fall back to idle mid-burst — that cut the clip to 8 frames and
+      // looked like a failed/missing flame. Prefer locked facing, then south.
+      const flame =
+        c.bearFrames.get(`roar:${locked}`) ?? c.bearFrames.get('roar:south');
+      return flame?.length ? flame : undefined;
+    }
+    return c.bearFrames.get(`roar:${roarGifFacing(facing)}`);
+  }
   if (pose === 'kick') {
     return c.bearFrames.get(`kick:${facing}`) ?? c.bearFrames.get('kick:south');
   }
@@ -957,6 +973,27 @@ function syncBearPose(c: Critter, dt: number): void {
   }
   // One-shot flourish (sword / kick / mask) — hold through the full clip.
   if ((c.roarHold ?? 0) > 0) {
+    // Ragnok flame is frame-driven (oneshot below). A wall-clock hold used to
+    // expire early because frameClock discarded remainder each step, so the
+    // burst died mid-cycle — and a missing atlas key drew nothing at all.
+    if (c.sprite.id === 'ragnok') {
+      const locked = c.ragnokFlameFacing ?? c.bearFacing ?? 'south';
+      const flame =
+        c.bearFrames?.get(`roar:${locked}`) ?? c.bearFrames?.get('roar:south');
+      if (!flame?.length) {
+        c.roarHold = 0;
+        c.bearPose = 'idle';
+        c.ragnokFlameFacing = undefined;
+        c.roarTimer = rand(4, 8);
+        c.frame = 0;
+        c.frameClock = 0;
+        return;
+      }
+      c.bearPose = 'roar';
+      c.bearFacing = locked;
+      c.ragnokFlameFacing = locked;
+      return;
+    }
     c.roarHold = (c.roarHold ?? 0) - dt;
     if ((c.roarHold ?? 0) <= 0) {
       c.roarHold = 0;
@@ -969,14 +1006,6 @@ function syncBearPose(c: Critter, dt: number): void {
         c.tx = Math.min(Math.max(c.x + rand(-36, 36), 0), Math.max(0, vw - c.w));
         c.ty = Math.min(Math.max(c.y + rand(70, 150), 0), Math.max(0, vh - c.h));
         c.timer = rand(2.5, 4.5);
-        c.frame = 0;
-        c.frameClock = 0;
-        return;
-      }
-      if (c.sprite.id === 'ragnok') {
-        c.bearPose = 'idle';
-        c.roarTimer = rand(8, 14);
-        c.timer = Math.max(c.timer, rand(1.2, 2.4));
         c.frame = 0;
         c.frameClock = 0;
         return;
@@ -1002,8 +1031,6 @@ function syncBearPose(c: Critter, dt: number): void {
     if (c.sprite.id === 'void-walker') {
       c.bearPose = 'roar';
       c.bearFacing = 'south';
-    } else if (c.sprite.id === 'ragnok') {
-      c.bearPose = 'roar';
     } else if (c.sprite.id === 'goblin-priest') {
       // Keep kick/mask pose while the hold runs.
       if (c.bearPose === 'mask') c.bearFacing = 'south';
@@ -1053,13 +1080,24 @@ function syncBearPose(c: Critter, dt: number): void {
         c.timer = Math.max(c.timer, windup + flourish + 0.4);
       } else if (isRagnok) {
         const facing = c.bearFacing ?? 'south';
-        const hold =
-          (c.bearFrames?.get(`roar:${facing}`)?.length ?? 41) * RAGNOK_FLAME_FRAME_TIME;
+        const frames = c.bearFrames?.get(`roar:${facing}`) ?? c.bearFrames?.get('roar:south');
+        if (!frames || frames.length < 2) {
+          // Atlas still loading / failed for this facing — retry soon, stay visible.
+          c.roarTimer = rand(1.5, 3);
+          c.bearPose = 'idle';
+          return;
+        }
+        const count = frames.length;
+        // Pause long enough for the full oneshot; completion is frame-driven
+        // (roarHold is not decremented for Ragnok — see syncBearPose above).
+        const hold = count * RAGNOK_FLAME_FRAME_TIME + 0.5;
         c.bearPose = 'roar';
         c.bearFacing = facing;
+        c.ragnokFlameFacing = facing;
         c.roarHold = hold;
         c.roarTimer = rand(10, 18);
-        c.timer = Math.max(c.timer, hold + 0.3);
+        c.state = 'pause';
+        c.timer = Math.max(c.timer, hold + 0.35);
       } else if (isGoblin) {
         // Fight-idle → kick → fight-idle, or fight-idle → mask → walk.
         const doMask = Math.random() < 0.4;
@@ -1110,7 +1148,8 @@ function advanceFrame(c: Critter, dt: number): void {
         (prevPose === 'wake' && c.bearPose === 'wake') ||
         (prevPose === 'launch' && c.bearPose === 'launch') ||
         (prevPose === 'kiss' && c.bearPose === 'kiss') ||
-        (prevPose === 'aura' && c.bearPose === 'aura');
+        (prevPose === 'aura' && c.bearPose === 'aura') ||
+        (prevPose === 'roar' && c.bearPose === 'roar' && c.sprite.id === 'ragnok');
       if (!sticky) {
         c.frame = 0;
         c.frameClock = 0;
@@ -1145,6 +1184,13 @@ function advanceFrame(c: Critter, dt: number): void {
     const frames = bearFrameList(c);
     const count = frames?.length ?? 1;
     if (count <= 1) {
+      // Ragnok roar with no atlas → abort so he doesn't sit invisible.
+      if (c.sprite.id === 'ragnok' && c.bearPose === 'roar') {
+        c.roarHold = 0;
+        c.bearPose = 'idle';
+        c.ragnokFlameFacing = undefined;
+        c.roarTimer = rand(4, 8);
+      }
       c.frame = 0;
       return;
     }
@@ -1158,7 +1204,9 @@ function advanceFrame(c: Critter, dt: number): void {
             : c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
     c.frameClock += dt;
     if (c.frameClock < period) return;
-    c.frameClock = 0;
+    // Keep remainder so wall-clock stays aligned with frame time (zeroing used
+    // to make each step ~dt-quantized and let timed flourishes finish early).
+    c.frameClock -= period;
     // Lie-down GIF once → sleep still for 15s.
     if (c.sleepPause && c.bearPose === 'sleep') {
       if (c.frame + 1 >= count) {
@@ -1166,6 +1214,21 @@ function advanceFrame(c: Critter, dt: number): void {
         c.bearPose = 'sleep-idle';
         c.frame = 0;
         c.timer = ALLIGATOR_BEAR_SLEEP_HOLD;
+        return;
+      }
+      c.frame += 1;
+      return;
+    }
+    // Ragnok flame: play once through, then clear the hold (don't wrap/% mid-burst).
+    if (c.sprite.id === 'ragnok' && c.bearPose === 'roar') {
+      if (c.frame + 1 >= count) {
+        c.roarHold = 0;
+        c.bearPose = 'idle';
+        c.ragnokFlameFacing = undefined;
+        c.roarTimer = rand(8, 14);
+        c.timer = Math.max(c.timer, rand(1.2, 2.4));
+        c.frame = 0;
+        c.frameClock = 0;
         return;
       }
       c.frame += 1;
@@ -1198,8 +1261,19 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
     ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
   }
   if (c.sprite.imageAtlas && c.bearFrames) {
-    const frames = bearFrameList(c);
-    const img = frames?.[c.frame] ?? frames?.[0];
+    let frames = bearFrameList(c);
+    // Never leave atlas critters undrawn (missing roar used to blank Ragnok entirely).
+    if (!frames?.length) {
+      const face = c.bearFacing ?? 'south';
+      frames =
+        c.bearFrames.get(`idle:${face}`) ??
+        c.bearFrames.get('idle:south') ??
+        c.bearFrames.get(`walk:${face}`) ??
+        c.bearFrames.get('walk:south');
+    }
+    const safeFrame =
+      frames && frames.length ? Math.min(Math.max(0, c.frame | 0), frames.length - 1) : 0;
+    const img = frames?.[safeFrame] ?? frames?.[0];
     if (img) {
       ctx.imageSmoothingEnabled = false;
       if (c.bearPose === 'sleep-idle') {

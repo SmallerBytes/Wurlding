@@ -11,6 +11,15 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.16',
+    date: '2026-11-06',
+    title: 'Ragnok flame burst reliability',
+    bullets: [
+      'Ragnok’s flame flourish now plays through the full frame cycle instead of cutting out early.',
+      'Fixed intermittent vanishing during some flame bursts when atlas frames failed to resolve.',
+    ],
+  },
+  {
     version: '0.1.15',
     date: '2026-11-06',
     title: 'Fae Princess sky roam, tighter cards, and app icon',
