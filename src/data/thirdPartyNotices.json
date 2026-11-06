@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T19:17:51.595Z",
+  "generatedAt": "2026-11-06T00:00:37.354Z",
   "directRuntime": [
     {
       "name": "@xyflow/react",
@@ -34,6 +34,12 @@
     {
       "name": "express",
       "version": "5.2.1",
+      "license": "MIT",
+      "dev": false
+    },
+    {
+      "name": "gifuct-js",
+      "version": "2.1.2",
       "license": "MIT",
       "dev": false
     },
@@ -786,6 +792,12 @@
       "dev": false
     },
     {
+      "name": "gifuct-js",
+      "version": "2.1.2",
+      "license": "MIT",
+      "dev": false
+    },
+    {
       "name": "glob",
       "version": "10.5.0",
       "license": "ISC",
@@ -885,6 +897,12 @@
       "name": "jackspeak",
       "version": "3.4.3",
       "license": "BlueOak-1.0.0",
+      "dev": false
+    },
+    {
+      "name": "js-binary-schema-parser",
+      "version": "2.0.3",
+      "license": "MIT",
       "dev": false
     },
     {
