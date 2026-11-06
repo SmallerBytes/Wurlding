@@ -30,7 +30,7 @@ let currentMotion = 'on';
 /** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
 let currentCritters = 'fae';
 
-const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie'];
+const CRITTER_GENRES = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie', 'alligator-bear'];
 
 const revealedWindows = new WeakSet();
 

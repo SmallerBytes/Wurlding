@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { loadBearFrames } from '../data/alligatorBear';
 import { renderSpriteFrame, spriteSize, type CritterSprite } from '../data/pixelCritters';
 
 /** Small looping preview of one pixel companion, used on the Settings page. */
@@ -21,6 +22,33 @@ export default function PixelSpritePreview({
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    let cancelled = false;
+    let intervalId = 0;
+
+    const drawImageFrame = (img: HTMLCanvasElement) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    };
+
+    if (sprite.imageAtlas) {
+      void (async () => {
+        const frames = await loadBearFrames('idle', 'south');
+        if (cancelled || !frames.length) return;
+        let index = 0;
+        drawImageFrame(frames[0]!);
+        if (!animate || frames.length < 2) return;
+        intervalId = window.setInterval(() => {
+          index = (index + 1) % frames.length;
+          drawImageFrame(frames[index]!);
+        }, 200);
+      })();
+      return () => {
+        cancelled = true;
+        if (intervalId) window.clearInterval(intervalId);
+      };
+    }
+
     const frames = sprite.frames
       .map((_, i) => renderSpriteFrame({ ...sprite, scale }, i))
       .filter((f): f is HTMLCanvasElement => f !== null);
@@ -34,11 +62,11 @@ export default function PixelSpritePreview({
     };
     draw();
     if (!animate || frames.length < 2) return;
-    const id = window.setInterval(() => {
+    intervalId = window.setInterval(() => {
       index = (index + 1) % frames.length;
       draw();
     }, Math.max(90, sprite.frameTime * 1000 * 2.5));
-    return () => window.clearInterval(id);
+    return () => window.clearInterval(intervalId);
   }, [sprite, scale, animate]);
 
   return (

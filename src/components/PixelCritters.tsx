@@ -8,6 +8,19 @@ import {
   type MotionPref,
 } from '../theme';
 import {
+  ALLIGATOR_BEAR_ATLAS_REV,
+  ALLIGATOR_BEAR_FRAME_TIME,
+  ALLIGATOR_BEAR_SLEEP_HOLD,
+  SLEEP_IDLE_DRAW_SCALE,
+  facingFromDelta,
+  loadBearFrames,
+  preloadAlligatorBear,
+  roarGifFacing,
+  sleepGifFacing,
+  type BearFacing,
+  type BearPose,
+} from '../data/alligatorBear';
+import {
   CRITTERS,
   getCritterGenre,
   renderSpriteFrame,
@@ -81,6 +94,17 @@ interface Critter {
   orbitRadius: number;
   trailClock: number;
   fireClock: number;
+  /** PNG/GIF atlas companions (Alligator Bear). Values are one or more frames. */
+  bearFrames?: Map<string, HTMLCanvasElement[]>;
+  bearFacing?: BearFacing;
+  bearPose?: BearPose;
+  roarTimer?: number;
+  roarHold?: number;
+  sleepPause?: boolean;
+  /** Seconds until the Alligator Bear wants another nap. */
+  sleepCooldown?: number;
+  /** Lie-down → hold still → wake GIF. */
+  sleepPhase?: 'lie-down' | 'hold' | 'wake';
 }
 
 interface Particle {
@@ -98,6 +122,13 @@ interface Particle {
 const frameCache = new Map<CritterId, [HTMLCanvasElement[], HTMLCanvasElement[]]>();
 
 function framesFor(sprite: CritterSprite): [HTMLCanvasElement[], HTMLCanvasElement[]] | null {
+  if (sprite.imageAtlas) {
+    // Placeholder — image companions draw from bearFrames instead.
+    const blank = document.createElement('canvas');
+    blank.width = 1;
+    blank.height = 1;
+    return [[blank], [blank]];
+  }
   const cached = frameCache.get(sprite.id);
   if (cached) return cached;
   const right: HTMLCanvasElement[] = [];
@@ -195,11 +226,13 @@ function moveToward(c: Critter, dt: number, speed: number): number {
   c.x += (dx / dist) * step;
   c.y += (dy / dist) * step;
   if (Math.abs(dx) > 2) c.facing = dx > 0 ? 1 : -1;
+  if (c.sprite.imageAtlas) c.bearFacing = facingFromDelta(dx, dy);
   return dist - step;
 }
 
-function makeCritter(id: CritterId): Critter | null {
+function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]>): Critter | null {
   const sprite = CRITTERS[id];
+  if (sprite.imageAtlas && !bearFrames) return null;
   const frames = framesFor(sprite);
   if (!frames) return null;
   const size = spriteSize(sprite);
@@ -217,6 +250,15 @@ function makeCritter(id: CritterId): Critter | null {
     facing: Math.random() < 0.5 ? 1 : -1,
     frame: 0,
     frameClock: Math.random() * sprite.frameTime,
+    bearFrames,
+    bearFacing: Math.random() < 0.5 ? 'east' : 'west',
+    bearPose: 'idle',
+    roarTimer: rand(5, 12),
+    roarHold: 0,
+    sleepPause: false,
+    sleepPhase: undefined,
+    // First nap comes fairly soon so the sleep cycle is easy to spot.
+    sleepCooldown: sprite.imageAtlas ? rand(6, 12) : undefined,
     state: sprite.kind === 'flyer' ? 'roam' : 'walk',
     timer: rand(1.5, 4),
     tx: 0,
@@ -284,6 +326,7 @@ function startHop(c: Critter, to: Perch): void {
     to,
   };
   c.facing = dx >= 0 ? 1 : -1;
+  if (c.sprite.imageAtlas) c.bearFacing = facingFromDelta(dx, dy);
   c.state = 'hop';
 }
 
@@ -439,7 +482,48 @@ function landSomewhere(c: Critter, perches: Perch[]): void {
   if (c.hop) c.hop.arc = 0;
 }
 
+function beginBearSleep(c: Critter): void {
+  c.sleepPause = true;
+  c.sleepPhase = 'lie-down';
+  c.bearPose = 'sleep';
+  c.bearFacing = sleepGifFacing(c.bearFacing ?? 'south');
+  c.frame = 0;
+  c.frameClock = 0;
+  // Pause stays open through lie-down → 15s hold → wake GIF.
+  c.timer = Number.POSITIVE_INFINITY;
+  c.sleepCooldown = rand(20, 35);
+}
+
+function ensureBearPoseFrames(c: Critter, pose: BearPose, facing: BearFacing): void {
+  if (!c.bearFrames) return;
+  const key = `${pose}:${facing}`;
+  if (c.bearFrames.has(key)) return;
+  void loadBearFrames(pose, facing).then((frames) => {
+    if (frames.length && c.bearFrames) c.bearFrames.set(key, frames);
+  });
+}
+
+function wakeFrameList(c: Critter): HTMLCanvasElement[] | undefined {
+  if (!c.bearFrames) return undefined;
+  const facing = sleepGifFacing(c.bearFacing ?? 'south');
+  return c.bearFrames.get(`wake:${facing}`) ?? c.bearFrames.get(`wake:south`);
+}
+
+function beginBearWake(c: Critter): void {
+  const facing = sleepGifFacing(c.bearFacing ?? 'south');
+  c.bearFacing = facing;
+  ensureBearPoseFrames(c, 'wake', facing);
+  c.sleepPhase = 'wake';
+  c.bearPose = 'wake';
+  c.frame = 0;
+  c.frameClock = 0;
+  c.timer = Number.POSITIVE_INFINITY;
+}
+
 function updateGround(c: Critter, dt: number, perches: Perch[]): void {
+  if (c.sprite.imageAtlas && !c.sleepPause && c.sleepCooldown != null) {
+    c.sleepCooldown = Math.max(0, c.sleepCooldown - dt);
+  }
   switch (c.state) {
     case 'walk': {
       const p = c.perch;
@@ -449,6 +533,7 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
       }
       c.timer -= dt;
       c.x += c.facing * c.sprite.speed * dt;
+      if (c.sprite.imageAtlas) c.bearFacing = facingFromDelta(c.facing, 0);
       c.y = restingY(c, p);
       const minX = p.x;
       const maxX = p.x + p.w - c.w;
@@ -463,20 +548,36 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
       c.perchOffset = c.x - p.x;
       if (atEdge || c.timer <= 0) {
         c.state = 'pause';
-        c.timer = atEdge ? rand(0.6, 2) : rand(0.4, 1.2);
+        // Nap when the cooldown is up (or often enough to notice); otherwise a short idle.
+        if (c.sprite.imageAtlas && (c.sleepCooldown ?? 0) <= 0) {
+          beginBearSleep(c);
+        } else {
+          c.sleepPause = false;
+          c.timer = atEdge ? rand(0.6, 2) : rand(0.4, 1.2);
+        }
       }
       break;
     }
     case 'pause': {
       const p = c.perch;
       if (!p || !refreshPerch(p)) {
+        c.sleepPause = false;
+        c.sleepPhase = undefined;
         landSomewhere(c, perches);
         break;
       }
       c.x = p.x + c.perchOffset;
       c.y = restingY(c, p);
+      // Lie-down / wake GIFs are driven by advanceFrame; only tick the 15s hold.
+      if (c.sleepPause && (c.sleepPhase === 'lie-down' || c.sleepPhase === 'wake')) break;
       c.timer -= dt;
       if (c.timer > 0) break;
+      if (c.sleepPause && c.sleepPhase === 'hold') {
+        beginBearWake(c);
+        break;
+      }
+      c.sleepPause = false;
+      c.sleepPhase = undefined;
       const next = Math.random() < 0.55 ? pickPerch(c, perches, c.sprite.hops ? 460 : 320) : null;
       if (next) {
         c.perchOffset = rand(0, Math.max(0, next.w - c.w));
@@ -511,12 +612,18 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
       const ease = hop.arc > 0 ? t : t * t * (3 - 2 * t);
       c.x = hop.x0 + (hop.x1 - hop.x0) * ease;
       c.y = hop.y0 + (hop.y1 - hop.y0) * ease - hop.arc * Math.sin(Math.PI * t);
+      if (c.sprite.imageAtlas) c.bearFacing = facingFromDelta(hop.x1 - hop.x0, hop.y1 - hop.y0);
       if (t >= 1) {
         c.perch = hop.to;
         c.perchOffset = c.x - hop.to.x;
         c.hop = null;
-        c.state = 'walk';
-        c.timer = rand(2, 6);
+        if (c.sprite.imageAtlas && (c.sleepCooldown ?? 0) <= 0) {
+          c.state = 'pause';
+          beginBearSleep(c);
+        } else {
+          c.state = 'walk';
+          c.timer = rand(2, 6);
+        }
       }
       break;
     }
@@ -525,7 +632,146 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
   }
 }
 
+function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
+  if (!c.bearFrames) return undefined;
+  const pose = c.bearPose ?? 'idle';
+  const facing = c.bearFacing ?? 'south';
+  const sleepFacing = sleepGifFacing(facing);
+  // Special poses must not fall back to idle/walk — that looked like skipping wake.
+  if (pose === 'sleep') return c.bearFrames.get(`sleep:${facing}`) ?? c.bearFrames.get(`sleep:${sleepFacing}`);
+  if (pose === 'wake') return wakeFrameList(c);
+  if (pose === 'jump') {
+    return c.bearFrames.get(`jump:${facing}`) ?? c.bearFrames.get('jump:south') ?? c.bearFrames.get(`walk:${facing}`);
+  }
+  if (pose === 'sleep-idle') {
+    return (
+      c.bearFrames.get(`sleep-idle:${facing}`) ??
+      c.bearFrames.get(`sleep-idle:${sleepFacing}`) ??
+      c.bearFrames.get(`sleep:${sleepFacing}`)
+    );
+  }
+  if (pose === 'roar') return c.bearFrames.get(`roar:${roarGifFacing(facing)}`);
+  return (
+    c.bearFrames.get(`${pose}:${facing}`) ??
+    c.bearFrames.get(`idle:${facing}`) ??
+    c.bearFrames.get(`walk:${facing}`) ??
+    c.bearFrames.get('idle:south') ??
+    c.bearFrames.get('walk:south')
+  );
+}
+
+function syncBearPose(c: Critter, dt: number): void {
+  // Roar cycle — hold through one full GIF (~1.8s) facing his current direction.
+  if ((c.roarHold ?? 0) > 0) {
+    c.roarHold = (c.roarHold ?? 0) - dt;
+    c.bearPose = 'roar';
+    c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+    return;
+  }
+  if (c.state === 'hop') {
+    c.bearPose = 'jump';
+    return;
+  }
+  if (c.state === 'walk' || c.state === 'approach') {
+    c.bearPose = 'walk';
+    if (c.sprite.imageAtlas) c.roarTimer = (c.roarTimer ?? 8) - dt;
+    return;
+  }
+  if (c.state === 'pause' && c.sleepPause) {
+    if (c.sleepPhase === 'wake') {
+      // Keep the sleep still on screen until wake frames are actually loaded.
+      c.bearPose = wakeFrameList(c)?.length ? 'wake' : 'sleep-idle';
+    } else if (c.sleepPhase === 'hold') {
+      c.bearPose = 'sleep-idle';
+    } else {
+      c.bearPose = 'sleep';
+    }
+    return;
+  }
+  // Occasional roar while idling on a ledge.
+  if (c.state === 'pause' && c.sprite.imageAtlas) {
+    c.roarTimer = (c.roarTimer ?? 8) - dt;
+    if ((c.roarTimer ?? 0) <= 0) {
+      // 9 frames × 200ms ≈ 1.8s.
+      c.roarHold = 1.8;
+      c.roarTimer = rand(12, 20);
+      c.timer = Math.max(c.timer, 1.8);
+      c.bearPose = 'roar';
+      c.bearFacing = roarGifFacing(c.bearFacing ?? 'south');
+      c.frame = 0;
+      c.frameClock = 0;
+      return;
+    }
+  }
+  c.bearPose = 'idle';
+}
+
 function advanceFrame(c: Critter, dt: number): void {
+  if (c.sprite.imageAtlas) {
+    const prevPose = c.bearPose;
+    const prevFacing = c.bearFacing;
+    syncBearPose(c, dt);
+    if (c.bearPose !== prevPose || c.bearFacing !== prevFacing) {
+      // Don't reset one-shot sleep/wake frames when sync re-affirms the same pose.
+      const sticky =
+        (prevPose === 'sleep' && c.bearPose === 'sleep') ||
+        (prevPose === 'wake' && c.bearPose === 'wake');
+      if (!sticky) {
+        c.frame = 0;
+        c.frameClock = 0;
+      }
+    }
+    // Wake GIF once → back to normal roaming (wait for frames if still loading).
+    if (c.sleepPause && c.sleepPhase === 'wake') {
+      const wakeFrames = wakeFrameList(c);
+      if (!wakeFrames || wakeFrames.length < 2) {
+        ensureBearPoseFrames(c, 'wake', sleepGifFacing(c.bearFacing ?? 'south'));
+        c.bearPose = 'sleep-idle';
+        c.frame = 0;
+        return;
+      }
+      const count = wakeFrames.length;
+      const period = c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
+      c.frameClock += dt;
+      if (c.frameClock < period) return;
+      c.frameClock = 0;
+      if (c.frame + 1 >= count) {
+        c.sleepPause = false;
+        c.sleepPhase = undefined;
+        c.bearPose = 'idle';
+        c.frame = 0;
+        c.timer = rand(0.5, 1.4);
+        return;
+      }
+      c.frame += 1;
+      c.bearPose = 'wake';
+      return;
+    }
+    const frames = bearFrameList(c);
+    const count = frames?.length ?? 1;
+    if (count <= 1) {
+      c.frame = 0;
+      return;
+    }
+    const period = c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
+    c.frameClock += dt;
+    if (c.frameClock < period) return;
+    c.frameClock = 0;
+    // Lie-down GIF once → sleep still for 15s.
+    if (c.sleepPause && c.bearPose === 'sleep') {
+      if (c.frame + 1 >= count) {
+        c.sleepPhase = 'hold';
+        c.bearPose = 'sleep-idle';
+        c.frame = 0;
+        c.timer = ALLIGATOR_BEAR_SLEEP_HOLD;
+        return;
+      }
+      c.frame += 1;
+      return;
+    }
+    c.frame = (c.frame + 1) % count;
+    return;
+  }
   const resting = c.state === 'perch' || c.state === 'pause';
   const period = resting ? c.sprite.frameTime * (c.sprite.kind === 'flyer' ? 5 : 1e9) : c.sprite.frameTime;
   c.frameClock += dt;
@@ -548,6 +794,24 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  if (c.sprite.imageAtlas && c.bearFrames) {
+    const frames = bearFrameList(c);
+    const img = frames?.[c.frame] ?? frames?.[0];
+    if (img) {
+      ctx.imageSmoothingEnabled = false;
+      if (c.bearPose === 'sleep-idle') {
+        // 40% smaller than the normal companion box, feet on the ledge.
+        const dw = Math.max(1, Math.round(c.w * SLEEP_IDLE_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * SLEEP_IDLE_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else {
+        ctx.drawImage(img, x, y, c.w, c.h);
+      }
+    }
+    return;
   }
   const frames = c.frames[c.facing === 1 ? 0 : 1];
   const img = frames[c.frame] ?? frames[0];
@@ -590,16 +854,14 @@ export default function PixelCritters() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const critters = pickCast(genre)
-      .map((id) => makeCritter(id))
-      .filter((c): c is Critter => c !== null);
-    const particles: Particle[] = [];
+    let disposed = false;
+    let raf = 0;
+    let last: number | null = null;
     let perches: Perch[] = [];
     let perchClock = 0;
     let perchesDirty = true;
-    let last: number | null = null;
-    let raf = 0;
-    let disposed = false;
+    const particles: Particle[] = [];
+    let critters: Critter[] = [];
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -673,7 +935,17 @@ export default function PixelCritters() {
     window.addEventListener('resize', resize);
     window.addEventListener('scroll', markDirty, { capture: true, passive: true });
     document.addEventListener('visibilitychange', onVisibility);
-    raf = window.requestAnimationFrame(tick);
+
+    void (async () => {
+      const cast = pickCast(genre);
+      const needsBear = cast.includes('alligator-bear');
+      const bearFrames = needsBear ? await preloadAlligatorBear() : undefined;
+      if (disposed) return;
+      critters = cast
+        .map((id) => makeCritter(id, id === 'alligator-bear' ? bearFrames : undefined))
+        .filter((c): c is Critter => c !== null);
+      raf = window.requestAnimationFrame(tick);
+    })();
 
     return () => {
       disposed = true;
@@ -683,7 +955,7 @@ export default function PixelCritters() {
       document.removeEventListener('visibilitychange', onVisibility);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [active, genre]);
+  }, [active, genre, ALLIGATOR_BEAR_ATLAS_REV]);
 
   if (!active) return null;
 

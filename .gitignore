@@ -22,6 +22,9 @@ release
 *.local
 debug.log
 
+# Raw sprite export drops (app uses public/critters/)
+/Alligator Bear/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

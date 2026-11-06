@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Settings as SettingsIcon, Moon, Sun, Sparkles, BookOpen, Ghost } from 'lucide-react';
 import { WHATS_NEW } from '../data/whatsNew';
-import { CRITTERS, CRITTER_GENRES } from '../data/pixelCritters';
+import { CRITTERS, visibleCritterGenres, isCritterGenre } from '../data/pixelCritters';
 import PixelSpritePreview from '../components/PixelSpritePreview';
 import {
   CRITTERS_EVENT,
@@ -19,7 +19,6 @@ import {
   type CritterGenre,
   type MotionPref,
 } from '../theme';
-import { isCritterGenre } from '../data/pixelCritters';
 
 function formatEntryDate(iso: string): string {
   const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
@@ -276,7 +275,7 @@ export default function Settings() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Pixel companion genre">
-            {CRITTER_GENRES.map((genre) => {
+            {visibleCritterGenres().map((genre) => {
               const selected = draft.critters === genre.id;
               const preview = Array.from(new Set(genre.cast)).slice(0, 3);
               return (

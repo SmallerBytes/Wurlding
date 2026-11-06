@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import AmbientMotes from './AmbientMotes';
 import PixelCritters from './PixelCritters';
+import SecretCritterUnlock from './SecretCritterUnlock';
 import {
   Globe, BookOpen, Users, Sword, Bug, Network, GitBranch,
   ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings,
@@ -39,6 +40,7 @@ export default function Layout() {
     <div className="relative flex h-screen overflow-hidden">
       <AmbientMotes />
       <PixelCritters />
+      <SecretCritterUnlock />
 
       {mobileOpen && (
         <div

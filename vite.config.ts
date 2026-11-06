@@ -17,7 +17,8 @@ export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   server: {
     watch: {
-      ignored: ['**/data/**'],
+      // Source sprite dumps (and Windows-locked GIFs) must not crash the watcher.
+      ignored: ['**/data/**', '**/Alligator Bear/**'],
     },
     proxy: {
       '/api': {

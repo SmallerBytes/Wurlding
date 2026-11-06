@@ -17,11 +17,20 @@ export type CritterId =
   | 'dragon'
   | 'butterfly'
   | 'beetle'
-  | 'snake';
+  | 'snake'
+  | 'alligator-bear';
 
-export type CritterGenre = 'off' | 'fae' | 'dragons' | 'goblins' | 'wilds' | 'menagerie';
+export type CritterGenre = 'off' | 'fae' | 'dragons' | 'goblins' | 'wilds' | 'menagerie' | 'alligator-bear';
 
-export const CRITTER_GENRE_IDS: CritterGenre[] = ['off', 'fae', 'dragons', 'goblins', 'wilds', 'menagerie'];
+export const CRITTER_GENRE_IDS: CritterGenre[] = [
+  'off',
+  'fae',
+  'dragons',
+  'goblins',
+  'wilds',
+  'menagerie',
+  'alligator-bear',
+];
 
 export function isCritterGenre(value: unknown): value is CritterGenre {
   return typeof value === 'string' && (CRITTER_GENRE_IDS as string[]).includes(value);
@@ -49,6 +58,13 @@ export interface CritterSprite {
   hops?: boolean;
   /** Occasional ember puff from the mouth (dragons). */
   breathesFire?: boolean;
+  /**
+   * Image-based companion (PNG atlas under /public). When set, `frames`/`palette` are unused
+   * placeholders and PixelCritters loads the atlas instead.
+   */
+  imageAtlas?: boolean;
+  /** Hidden until unlocked by a secret chord. */
+  secret?: boolean;
 }
 
 const FAIRY: CritterSprite = {
@@ -491,6 +507,21 @@ const SNAKE: CritterSprite = {
   ],
 };
 
+/** Albino swamp-crowned alligator-bear — PNG/GIF atlas companion. */
+const ALLIGATOR_BEAR: CritterSprite = {
+  id: 'alligator-bear',
+  name: 'Alligator Bear',
+  kind: 'walker',
+  scale: 3,
+  frameTime: 0.2, // matches walk-south.gif frame delay
+  speed: 42,
+  hops: true,
+  imageAtlas: true,
+  // Unused for image companions — kept so the ASCII renderer path stays typed.
+  palette: {},
+  frames: [['.']],
+};
+
 export const CRITTERS: Record<CritterId, CritterSprite> = {
   fairy: FAIRY,
   pixie: PIXIE,
@@ -501,6 +532,7 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   butterfly: BUTTERFLY,
   beetle: BEETLE,
   snake: SNAKE,
+  'alligator-bear': ALLIGATOR_BEAR,
 };
 
 export interface CritterGenreInfo {
@@ -556,7 +588,20 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
     cast: ['fairy', 'pixie', 'sprite', 'goblin', 'wyvern', 'dragon', 'butterfly', 'beetle', 'snake'],
     count: 4,
   },
+  {
+    id: 'alligator-bear',
+    label: 'Alligator Bear',
+    description:
+      'King of the Cursed Marshlands — an albino alligator with the bulk of a bear, armored in black iron and crowned in swamp-thorn. He ruled the drowned fens until the mists swallowed his throne; now he prowls your pages, a restless sovereign looking for a realm worth claiming again.',
+    cast: ['alligator-bear'],
+    count: 1,
+  },
 ];
+
+/** Companion genre cards shown in Settings (includes Alligator Bear). */
+export function visibleCritterGenres(_unlockedSecrets = true): CritterGenreInfo[] {
+  return CRITTER_GENRES;
+}
 
 export function getCritterGenre(id: CritterGenre): CritterGenreInfo {
   return CRITTER_GENRES.find((g) => g.id === id) ?? CRITTER_GENRES[0]!;
@@ -564,6 +609,10 @@ export function getCritterGenre(id: CritterGenre): CritterGenreInfo {
 
 /** Width and height of a sprite in sprite pixels (frames are padded to the widest row). */
 export function spriteSize(sprite: CritterSprite): { w: number; h: number } {
+  if (sprite.imageAtlas) {
+    // Matches ALLIGATOR_BEAR_SIZE in alligatorBear.ts
+    return { w: 32, h: 32 };
+  }
   let w = 0;
   let h = 0;
   for (const frame of sprite.frames) {

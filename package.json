@@ -1,7 +1,7 @@
 {
   "name": "wurlding",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Worldbuilding and story tools for authors and game masters.",
   "author": "Michael A Hernandez",
   "repository": {
@@ -31,6 +31,7 @@
     "cors": "^2.8.6",
     "electron-updater": "^6.8.3",
     "express": "^5.2.1",
+    "gifuct-js": "^2.1.2",
     "lucide-react": "^1.7.0",
     "multer": "^2.1.1",
     "nanoid": "^5.1.7",
