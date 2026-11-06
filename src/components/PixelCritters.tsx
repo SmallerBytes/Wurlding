@@ -301,11 +301,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     bearFacing: Math.random() < 0.5 ? 'east' : 'west',
     bearPose: 'idle',
     roarTimer:
-      sprite.atlasExtras ||
-      sprite.id === 'void-walker' ||
-      sprite.id === 'emerald-wyvern'
-        ? rand(5, 12)
-        : undefined,
+      sprite.atlasExtras || sprite.id === 'void-walker' ? rand(5, 12) : undefined,
     roarHold: 0,
     sleepPause: false,
     sleepPhase: undefined,
@@ -765,7 +761,7 @@ function syncBearPose(c: Critter, dt: number): void {
   if (c.state === 'pause' && c.roarTimer != null) {
     c.roarTimer = (c.roarTimer ?? 8) - dt;
     if ((c.roarTimer ?? 0) <= 0) {
-      const flourishIds = new Set(['void-walker', 'emerald-wyvern']);
+      const flourishIds = new Set(['void-walker']);
       const flourish = flourishIds.has(c.sprite.id)
         ? (c.bearFrames?.get('roar:south')?.length ?? 12) * (c.sprite.frameTime || 0.12)
         : 1.8;

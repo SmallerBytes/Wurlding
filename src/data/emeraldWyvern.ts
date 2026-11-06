@@ -1,12 +1,12 @@
 /**
  * Emerald Wyvern companion — PNG frame-sequence atlas.
- * Frames live in /public/critters/emerald-wyvern/{walk|idle|fire}/…
+ * Frames live in /public/critters/emerald-wyvern/{walk|idle}/…
  */
 
 import { facingFromDelta, type BearFacing } from './alligatorBear';
 
 export type WyvernFacing = BearFacing;
-export type WyvernPose = 'idle' | 'walk' | 'fire';
+export type WyvernPose = 'idle' | 'walk';
 
 export const WYVERN_FACINGS: WyvernFacing[] = [
   'south',
@@ -19,25 +19,17 @@ export const WYVERN_FACINGS: WyvernFacing[] = [
   'south-west',
 ];
 
-/** Fire-breath currently only exists for south. */
-export const WYVERN_FIRE_FACINGS: WyvernFacing[] = ['south'];
-
 export { facingFromDelta };
 
 export const EMERALD_WYVERN_SIZE = 48;
 export const EMERALD_WYVERN_SCALE = 2;
 export const EMERALD_WYVERN_FRAME_TIME = 0.12;
-export const EMERALD_WYVERN_ATLAS_REV = 4;
+export const EMERALD_WYVERN_ATLAS_REV = 5;
 
 const WALK_FRAME_COUNT = 8;
 const IDLE_FRAME_COUNT = 15;
-const FIRE_FRAME_COUNT = 15;
 
-export function fireFacing(facing: WyvernFacing): WyvernFacing {
-  return WYVERN_FIRE_FACINGS.includes(facing) ? facing : 'south';
-}
-
-function frameUrl(pose: 'walk' | 'idle' | 'fire', facing: WyvernFacing, index: number): string {
+function frameUrl(pose: 'walk' | 'idle', facing: WyvernFacing, index: number): string {
   const base = import.meta.env.BASE_URL || '/';
   const n = String(index).padStart(3, '0');
   return `${base}critters/emerald-wyvern/${pose}/${facing}/frame_${n}.png`;
@@ -65,7 +57,7 @@ async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
 }
 
 async function loadFrameSequence(
-  pose: 'walk' | 'idle' | 'fire',
+  pose: 'walk' | 'idle',
   facing: WyvernFacing,
   count: number,
 ): Promise<HTMLCanvasElement[]> {
@@ -91,9 +83,6 @@ export async function loadWyvernFrames(
     const walk = await loadFrameSequence('walk', facing, WALK_FRAME_COUNT);
     return walk.length ? [walk[0]!] : [];
   }
-  if (pose === 'fire') {
-    return loadFrameSequence('fire', fireFacing(facing), FIRE_FRAME_COUNT);
-  }
   return loadFrameSequence('walk', facing, WALK_FRAME_COUNT);
 }
 
@@ -107,14 +96,5 @@ export async function preloadEmeraldWyvern(): Promise<Map<string, HTMLCanvasElem
       if (idle.length) map.set(`idle:${facing}`, idle);
     }),
   );
-  const fire = await loadWyvernFrames('fire', 'south');
-  if (fire.length) {
-    map.set('fire:south', fire);
-    // Alias as roar so the idle flourish timer can play fire-breath.
-    for (const facing of WYVERN_FACINGS) {
-      map.set(`fire:${facing}`, fire);
-      map.set(`roar:${facing}`, fire);
-    }
-  }
   return map;
 }
