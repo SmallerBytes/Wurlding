@@ -11,6 +11,14 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.13',
+    date: '2026-11-05',
+    title: 'Emerald Wyvern idle polish',
+    bullets: [
+      'Emerald Wyvern no longer plays the fire-breath flourish while idling — walk and breathe-idle only for now.',
+    ],
+  },
+  {
     version: '0.1.12',
     date: '2026-11-05',
     title: 'More companions and a darker default',
