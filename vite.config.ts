@@ -36,6 +36,7 @@ export default defineConfig(({ command }) => ({
         '**/Victfur/**',
         '**/The_Iron_Giant/**',
         '**/The_Iron_Giant (1)/**',
+        '**/Ghostfreak/**',
         '**/release/**',
       ],
     },

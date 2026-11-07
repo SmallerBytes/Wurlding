@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import AmbientMotes from './AmbientMotes';
 import PixelCritters from './PixelCritters';
@@ -8,6 +8,10 @@ import {
   ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings,
 } from 'lucide-react';
 import useStore from '../store/useStore';
+import {
+  DESKTOP_COMPANIONS_EVENT,
+  getStoredDesktopCompanions,
+} from '../theme';
 
 const NAV_ITEMS = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -28,6 +32,7 @@ const NAV_ITEMS = [
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCompanions, setDesktopCompanionsState] = useState(() => getStoredDesktopCompanions());
   const { worlds, activeWorldId, setActiveWorld } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,10 +41,19 @@ export default function Layout() {
   const pageKey = location.pathname;
   const animatePage = !location.pathname.startsWith('/map');
 
+  useEffect(() => {
+    const onDesktop = (e: Event) => {
+      setDesktopCompanionsState(Boolean((e as CustomEvent<boolean>).detail));
+    };
+    window.addEventListener(DESKTOP_COMPANIONS_EVENT, onDesktop);
+    return () => window.removeEventListener(DESKTOP_COMPANIONS_EVENT, onDesktop);
+  }, []);
+
   return (
     <div className="relative flex h-screen overflow-hidden">
       <AmbientMotes />
-      <PixelCritters />
+      {/* When desktop overlay is on, companions live there instead of duplicating in-app. */}
+      {!desktopCompanions && <PixelCritters />}
       <SecretCritterUnlock />
 
       {mobileOpen && (

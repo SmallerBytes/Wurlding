@@ -1,4 +1,5 @@
 import { BrowserRouter, HashRouter, Routes, Route } from 'react-router-dom';
+import CompanionOverlay from './pages/CompanionOverlay';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Worlds from './pages/Worlds';
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/companion-overlay" element={<CompanionOverlay />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="worlds" element={<Worlds />} />

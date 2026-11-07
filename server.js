@@ -67,7 +67,7 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
   }
 }
 
-const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 function readPreferences() {
   if (!fs.existsSync(PREFS_FILE)) return null;
@@ -79,6 +79,7 @@ function readPreferences() {
     const prefs = { theme, motion };
     const critters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
     if (CRITTER_GENRES.includes(critters)) prefs.critters = critters;
+    if (raw?.desktopCompanions === true) prefs.desktopCompanions = true;
     return prefs;
   } catch {
     console.error('[WURLDING] Failed to read preferences file');
@@ -480,6 +481,8 @@ app.put('/api/preferences', (req, res) => {
   try {
     const prefs = { theme, motion };
     if (critters !== undefined) prefs.critters = critters;
+    if (req.body?.desktopCompanions === true) prefs.desktopCompanions = true;
+    else if (req.body?.desktopCompanions === false) prefs.desktopCompanions = false;
     writePreferences(prefs);
     res.json({ ok: true, data: prefs });
   } catch (err) {

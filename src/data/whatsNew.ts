@@ -11,6 +11,15 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.18',
+    date: '2026-11-06',
+    title: 'Ghostfreak and desktop companions',
+    bullets: [
+      'New companion: Ghostfreak — drifts across the floor, opens a dark void, or sinks out of sight.',
+      'Add to screen: keep your selected companion roaming the desktop even while Wurlding is minimized.',
+    ],
+  },
+  {
     version: '0.1.17',
     date: '2026-11-06',
     title: 'More companions: Necromage, Golem, Victfur, Iron Giant',

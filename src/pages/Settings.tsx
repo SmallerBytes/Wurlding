@@ -8,12 +8,14 @@ import {
   MOTION_EVENT,
   THEME_EVENT,
   getStoredCritters,
+  getStoredDesktopCompanions,
   getStoredMotion,
   getStoredTheme,
   previewCritters,
   previewMotion,
   previewTheme,
   savePreferences,
+  setDesktopCompanions,
   type AppPreferences,
   type AppTheme,
   type CritterGenre,
@@ -27,11 +29,21 @@ function formatEntryDate(iso: string): string {
 }
 
 function readCurrent(): AppPreferences {
-  return { theme: getStoredTheme(), motion: getStoredMotion(), critters: getStoredCritters() };
+  return {
+    theme: getStoredTheme(),
+    motion: getStoredMotion(),
+    critters: getStoredCritters(),
+    desktopCompanions: getStoredDesktopCompanions(),
+  };
 }
 
 function samePrefs(a: AppPreferences, b: AppPreferences): boolean {
-  return a.theme === b.theme && a.motion === b.motion && a.critters === b.critters;
+  return (
+    a.theme === b.theme &&
+    a.motion === b.motion &&
+    a.critters === b.critters &&
+    Boolean(a.desktopCompanions) === Boolean(b.desktopCompanions)
+  );
 }
 
 /** Apply a draft to this window only (nothing is written until Save). */
@@ -125,8 +137,29 @@ export default function Settings() {
     if (next === draft.critters) return;
     applyingLocal.current = true;
     previewCritters(next);
+    if (next === 'off' && draft.desktopCompanions) {
+      setDesktopCompanions(false);
+    }
     applyingLocal.current = false;
-    setDraft((d) => ({ ...d, critters: next }));
+    setDraft((d) => ({
+      ...d,
+      critters: next,
+      desktopCompanions: next === 'off' ? false : d.desktopCompanions,
+    }));
+    if (next === 'off') {
+      setSaved((s) => ({ ...s, desktopCompanions: false }));
+    }
+    setSaveState('idle');
+  };
+
+  const toggleDesktopCompanions = () => {
+    if (draft.critters === 'off' || draft.motion === 'off') return;
+    const next = !draft.desktopCompanions;
+    applyingLocal.current = true;
+    setDesktopCompanions(next);
+    applyingLocal.current = false;
+    setDraft((d) => ({ ...d, desktopCompanions: next }));
+    setSaved((s) => ({ ...s, desktopCompanions: next }));
     setSaveState('idle');
   };
 
@@ -317,6 +350,23 @@ export default function Settings() {
               );
             })}
           </div>
+
+          {draft.critters !== 'off' && motionOn && (
+            <div className="flex flex-col gap-2 border-t border-dusk/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-mist">
+                {draft.desktopCompanions
+                  ? 'Companion is on your desktop and stays while Wurlding is open — even minimized.'
+                  : 'Add this companion to your desktop so it keeps roaming after you minimize Wurlding.'}
+              </p>
+              <button
+                type="button"
+                className={draft.desktopCompanions ? 'btn-secondary' : 'btn-primary'}
+                onClick={toggleDesktopCompanions}
+              >
+                {draft.desktopCompanions ? 'Remove from screen' : 'Add to screen'}
+              </button>
+            </div>
+          )}
         </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3">

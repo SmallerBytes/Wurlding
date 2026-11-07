@@ -28,7 +28,8 @@ export type CritterId =
   | 'necromage'
   | 'golem'
   | 'victfur'
-  | 'iron-giant';
+  | 'iron-giant'
+  | 'ghostfreak';
 
 export type CritterGenre =
   | 'off'
@@ -39,6 +40,7 @@ export type CritterGenre =
   | 'golem'
   | 'victfur'
   | 'iron-giant'
+  | 'ghostfreak'
   | 'wilds'
   | 'alligator-bear'
   | 'crabacus'
@@ -54,6 +56,7 @@ export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'golem',
   'victfur',
   'iron-giant',
+  'ghostfreak',
   'wilds',
   'alligator-bear',
   'crabacus',
@@ -717,6 +720,23 @@ const IRON_GIANT: CritterSprite = {
   frames: [['.']],
 };
 
+/** Ghostfreak — drift / idle + stomach-void or sink flourish. */
+const GHOSTFREAK: CritterSprite = {
+  id: 'ghostfreak',
+  name: 'Ghostfreak',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.1,
+  speed: 34,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 64,
+  trail: '#e879f9',
+  glow: 'rgba(232, 121, 249, 0.22)',
+  palette: {},
+  frames: [['.']],
+};
+
 export const CRITTERS: Record<CritterId, CritterSprite> = {
   fairy: FAIRY,
   pixie: PIXIE,
@@ -738,6 +758,7 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   golem: GOLEM,
   victfur: VICTFUR,
   'iron-giant': IRON_GIANT,
+  ghostfreak: GHOSTFREAK,
 };
 
 export interface CritterGenreInfo {
@@ -805,6 +826,13 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
     label: 'The Iron Giant',
     description: 'A towering gunmetal robot who strides the floor and flashes his eyes red.',
     cast: ['iron-giant'],
+    count: 1,
+  },
+  {
+    id: 'ghostfreak',
+    label: 'Ghostfreak',
+    description: 'A one-eyed phantom who drifts, opens a dark void, or sinks through the floor.',
+    cast: ['ghostfreak'],
     count: 1,
   },
   {

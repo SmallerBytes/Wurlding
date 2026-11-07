@@ -1,11 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, screen } = require('electron');
 const { pathToFileURL } = require('url');
 
 let serverStarted = false;
 /** Resolved `server.js` module (has `closeDataServer` after install). */
 let serverModuleRef = null;
+/** Main app window (not the companion overlay or updater progress). */
+let mainWindow = null;
+/** Transparent always-on-top companions overlay. */
+let companionOverlayWindow = null;
 
 /** User opened Help → Check for Updates (controls “no update” dialog + progress UI). */
 let userRequestedUpdateCheck = false;
@@ -29,8 +33,10 @@ let currentAppTheme = 'dark';
 let currentMotion = 'on';
 /** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
 let currentCritters = 'fae-princess';
+/** Companions roam a desktop overlay even when the main window is minimized. */
+let currentDesktopCompanions = false;
 
-const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 const revealedWindows = new WeakSet();
 
@@ -67,7 +73,8 @@ function readDiskPreferences() {
     if (!theme || !motion) return null;
     const rawCritters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
     const critters = CRITTER_GENRES.includes(rawCritters) ? rawCritters : currentCritters;
-    return { theme, motion, critters };
+    const desktopCompanions = raw?.desktopCompanions === true;
+    return { theme, motion, critters, desktopCompanions };
   } catch {
     return null;
   }
@@ -80,41 +87,182 @@ function writeDiskPreferences(prefs) {
 }
 
 function currentPreferences() {
-  return { theme: currentAppTheme, motion: currentMotion, critters: currentCritters };
+  return {
+    theme: currentAppTheme,
+    motion: currentMotion,
+    critters: currentCritters,
+    desktopCompanions: currentDesktopCompanions,
+  };
 }
 
 function isAppWindow(win) {
-  return Boolean(win) && !win.isDestroyed() && win !== downloadProgressWindow;
+  return (
+    Boolean(win) &&
+    !win.isDestroyed() &&
+    win !== downloadProgressWindow &&
+    win !== companionOverlayWindow
+  );
 }
 
-function prefsScript(theme, motion, critters) {
+function prefsScript(theme, motion, critters, desktopCompanions) {
   const safeCritters = CRITTER_GENRES.includes(critters) ? critters : 'fae-princess';
+  const desk = desktopCompanions === true;
   return `(function () {
     try {
       localStorage.setItem('wurlding:theme', ${JSON.stringify(theme)});
       localStorage.setItem('wurlding:motion', ${JSON.stringify(motion)});
       localStorage.setItem('wurlding:critters', ${JSON.stringify(safeCritters)});
+      localStorage.setItem('wurlding:desktop-companions', ${JSON.stringify(desk ? '1' : '0')});
       document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});
       document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
       document.documentElement.setAttribute('data-motion', ${JSON.stringify(motion)});
       window.dispatchEvent(new CustomEvent('wurlding:theme', { detail: ${JSON.stringify(theme)} }));
       window.dispatchEvent(new CustomEvent('wurlding:motion', { detail: ${JSON.stringify(motion)} }));
       window.dispatchEvent(new CustomEvent('wurlding:critters', { detail: ${JSON.stringify(safeCritters)} }));
+      window.dispatchEvent(new CustomEvent('wurlding:desktop-companions', { detail: ${desk} }));
     } catch (e) {}
   })();`;
 }
 
+function overlayShouldShow() {
+  return currentDesktopCompanions && currentCritters !== 'off' && currentMotion === 'on';
+}
+
+function destroyCompanionOverlay() {
+  if (!companionOverlayWindow || companionOverlayWindow.isDestroyed()) {
+    companionOverlayWindow = null;
+    return;
+  }
+  try {
+    companionOverlayWindow.destroy();
+  } catch {
+    // ignore
+  }
+  companionOverlayWindow = null;
+}
+
+function syncCompanionOverlayPrefs() {
+  if (!companionOverlayWindow || companionOverlayWindow.isDestroyed()) return;
+  companionOverlayWindow.webContents
+    .executeJavaScript(
+      prefsScript(currentAppTheme, currentMotion, currentCritters, currentDesktopCompanions),
+    )
+    .catch(() => {});
+}
+
+function createCompanionOverlay() {
+  if (companionOverlayWindow && !companionOverlayWindow.isDestroyed()) {
+    return companionOverlayWindow;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const { x, y, width, height } = display.bounds;
+
+  const win = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    thickFrame: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+
+  companionOverlayWindow = win;
+  try {
+    win.setAlwaysOnTop(true, 'screen-saver');
+  } catch {
+    win.setAlwaysOnTop(true);
+  }
+  try {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch {
+    // ignore
+  }
+  win.setIgnoreMouseEvents(true, { forward: true });
+
+  const startUrl = process.env.ELECTRON_START_URL;
+  if (startUrl) {
+    const base = startUrl.replace(/\/?$/, '/');
+    win.loadURL(`${base}#/companion-overlay`);
+  } else {
+    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+    win.loadFile(indexPath, { hash: '/companion-overlay' });
+  }
+
+  win.webContents.on('did-finish-load', () => {
+    syncCompanionOverlayPrefs();
+  });
+
+  win.on('closed', () => {
+    if (companionOverlayWindow === win) companionOverlayWindow = null;
+  });
+
+  return win;
+}
+
+function setDesktopCompanionsEnabled(enabled) {
+  const next =
+    Boolean(enabled) && currentCritters !== 'off' && currentMotion === 'on';
+  currentDesktopCompanions = next;
+  try {
+    writeDiskPreferences(currentPreferences());
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[WURLDING] Failed to save desktop companion pref:', err);
+  }
+
+  if (overlayShouldShow()) {
+    const win = createCompanionOverlay();
+    syncCompanionOverlayPrefs();
+    if (!win.isVisible()) win.showInactive();
+  } else {
+    destroyCompanionOverlay();
+  }
+}
+
 function pushPrefsToAllWindows() {
-  const script = prefsScript(currentAppTheme, currentMotion, currentCritters);
+  const script = prefsScript(
+    currentAppTheme,
+    currentMotion,
+    currentCritters,
+    currentDesktopCompanions,
+  );
   const bg = themeBackgroundColor(currentAppTheme);
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!isAppWindow(win)) continue;
-    try {
-      win.setBackgroundColor(bg);
-    } catch {
-      // ignore
+    if (!isAppWindow(win) && win !== companionOverlayWindow) continue;
+    if (isAppWindow(win)) {
+      try {
+        win.setBackgroundColor(bg);
+      } catch {
+        // ignore
+      }
     }
+    if (!win || win.isDestroyed()) continue;
     win.webContents.executeJavaScript(script).catch(() => {});
+  }
+  if (overlayShouldShow()) {
+    const overlay = createCompanionOverlay();
+    if (!overlay.isVisible()) overlay.showInactive();
+  } else {
+    destroyCompanionOverlay();
   }
 }
 
@@ -122,6 +270,7 @@ function setAppMotion(pref) {
   const next = pref === 'off' ? 'off' : 'on';
   if (currentMotion === next) return;
   currentMotion = next;
+  if (next === 'off') currentDesktopCompanions = false;
   writeDiskPreferences(currentPreferences());
   pushPrefsToAllWindows();
   createApplicationMenu();
@@ -146,6 +295,7 @@ function applySavedPreferencesFromDisk() {
   currentAppTheme = disk.theme;
   currentMotion = disk.motion;
   currentCritters = disk.critters;
+  currentDesktopCompanions = disk.desktopCompanions === true;
 }
 
 function syncThemeFromRenderer(win) {
@@ -253,16 +403,21 @@ function revealWithSavedPrefs(win) {
 
   const disk = readDiskPreferences();
   const apply = disk
-    ? win.webContents.executeJavaScript(prefsScript(disk.theme, disk.motion, disk.critters)).then(() => {
-        currentAppTheme = disk.theme;
-        currentMotion = disk.motion;
-        currentCritters = disk.critters;
-        try {
-          win.setBackgroundColor(themeBackgroundColor(disk.theme));
-        } catch {
-          // ignore
-        }
-      })
+    ? win.webContents
+        .executeJavaScript(
+          prefsScript(disk.theme, disk.motion, disk.critters, disk.desktopCompanions === true),
+        )
+        .then(() => {
+          currentAppTheme = disk.theme;
+          currentMotion = disk.motion;
+          currentCritters = disk.critters;
+          currentDesktopCompanions = disk.desktopCompanions === true;
+          try {
+            win.setBackgroundColor(themeBackgroundColor(disk.theme));
+          } catch {
+            // ignore
+          }
+        })
     : Promise.resolve();
 
   const showTimer = setTimeout(() => {
@@ -308,6 +463,7 @@ function createWindow() {
       contextIsolation: true,
     },
   });
+  mainWindow = win;
 
   const startUrl = process.env.ELECTRON_START_URL;
   if (startUrl) {
@@ -325,6 +481,10 @@ function createWindow() {
   });
   win.on('focus', () => {
     if (revealedWindows.has(win)) syncThemeFromRenderer(win);
+  });
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+    destroyCompanionOverlay();
   });
 }
 
@@ -631,6 +791,12 @@ ipcMain.on('preferences-saved', (_event, prefs) => {
   currentAppTheme = theme;
   currentMotion = motion;
   currentCritters = critters;
+  if (typeof prefs?.desktopCompanions === 'boolean') {
+    currentDesktopCompanions = prefs.desktopCompanions;
+  }
+  if (currentCritters === 'off' || currentMotion === 'off') {
+    currentDesktopCompanions = false;
+  }
   try {
     writeDiskPreferences(currentPreferences());
   } catch (err) {
@@ -645,7 +811,25 @@ ipcMain.on('preferences-saved', (_event, prefs) => {
       // ignore
     }
   }
+  syncCompanionOverlayPrefs();
+  if (overlayShouldShow()) {
+    const overlay = createCompanionOverlay();
+    if (!overlay.isVisible()) overlay.showInactive();
+  } else {
+    destroyCompanionOverlay();
+  }
   createApplicationMenu();
+});
+
+ipcMain.on('set-desktop-companions', (_event, enabled) => {
+  setDesktopCompanionsEnabled(Boolean(enabled));
+});
+
+ipcMain.handle('get-desktop-companions', () => currentDesktopCompanions === true);
+
+ipcMain.handle('is-companion-overlay', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return Boolean(win && win === companionOverlayWindow);
 });
 
 app.whenReady().then(async () => {
@@ -655,12 +839,23 @@ app.whenReady().then(async () => {
   createApplicationMenu();
   setupAutoUpdater();
   createWindow();
+  if (overlayShouldShow()) {
+    const overlay = createCompanionOverlay();
+    overlay.once('ready-to-show', () => {
+      if (overlayShouldShow() && !overlay.isDestroyed()) overlay.showInactive();
+    });
+  }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().filter(isAppWindow).length === 0) createWindow();
   });
 });
 
+app.on('before-quit', () => {
+  destroyCompanionOverlay();
+});
+
 app.on('window-all-closed', () => {
+  destroyCompanionOverlay();
   if (process.platform !== 'darwin') app.quit();
 });

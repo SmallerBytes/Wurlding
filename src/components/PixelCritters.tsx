@@ -69,6 +69,12 @@ import {
   preloadIronGiant,
 } from '../data/ironGiant';
 import {
+  GHOSTFREAK_ATLAS_REV,
+  GHOSTFREAK_SINK_FRAME_TIME,
+  GHOSTFREAK_VOID_FRAME_TIME,
+  preloadGhostfreak,
+} from '../data/ghostfreak';
+import {
   VOID_ATTACK_DRAW_SCALE,
   VOID_ATTACK_FRAME_TIME,
   VOID_WALKER_ATLAS_REV,
@@ -84,7 +90,7 @@ import {
 } from '../data/pixelCritters';
 
 /** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
-const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}`;
+const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}:${GHOSTFREAK_ATLAS_REV}`;
 
 /** Floor-wander atlas companions with frame-driven oneshot flourishes. */
 function isFlourishWalker(id: CritterId): boolean {
@@ -93,7 +99,8 @@ function isFlourishWalker(id: CritterId): boolean {
     id === 'necromage' ||
     id === 'golem' ||
     id === 'victfur' ||
-    id === 'iron-giant'
+    id === 'iron-giant' ||
+    id === 'ghostfreak'
   );
 }
 
@@ -106,6 +113,8 @@ function flourishPeriod(c: Critter): number {
   if (c.sprite.id === 'victfur' && c.bearPose === 'roar') return VICTFUR_COAT_FRAME_TIME;
   if (c.sprite.id === 'victfur' && c.bearPose === 'aura') return VICTFUR_HAT_FRAME_TIME;
   if (c.sprite.id === 'iron-giant' && c.bearPose === 'roar') return IRON_GIANT_FLASH_FRAME_TIME;
+  if (c.sprite.id === 'ghostfreak' && c.bearPose === 'roar') return GHOSTFREAK_VOID_FRAME_TIME;
+  if (c.sprite.id === 'ghostfreak' && c.bearPose === 'aura') return GHOSTFREAK_SINK_FRAME_TIME;
   return c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
 }
 
@@ -1132,7 +1141,8 @@ function syncBearPose(c: Critter, dt: number): void {
         const useAura =
           (c.sprite.id === 'necromage' ||
             c.sprite.id === 'golem' ||
-            c.sprite.id === 'victfur') &&
+            c.sprite.id === 'victfur' ||
+            c.sprite.id === 'ghostfreak') &&
           Math.random() < 0.4;
         const pose: BearPose = useAura ? 'aura' : 'roar';
         // Ragnok keeps facing for 8-dir flame; others face south for their clips.
@@ -1534,6 +1544,7 @@ export default function PixelCritters() {
           else if (id === 'golem') atlasById.set(id, await preloadGolem());
           else if (id === 'victfur') atlasById.set(id, await preloadVictfur());
           else if (id === 'iron-giant') atlasById.set(id, await preloadIronGiant());
+          else if (id === 'ghostfreak') atlasById.set(id, await preloadGhostfreak());
         }),
       );
       if (disposed) return;

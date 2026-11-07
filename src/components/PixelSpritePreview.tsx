@@ -9,6 +9,7 @@ import { loadNecromageFrames } from '../data/necromage';
 import { loadGolemFrames } from '../data/golem';
 import { loadVictfurFrames } from '../data/victfur';
 import { loadIronGiantFrames } from '../data/ironGiant';
+import { loadGhostfreakFrames } from '../data/ghostfreak';
 import { loadVoidFrames } from '../data/voidWalker';
 import { renderSpriteFrame, spriteSize, type CritterSprite } from '../data/pixelCritters';
 
@@ -104,7 +105,9 @@ export default function PixelSpritePreview({
                             ? await loadVictfurFrames('idle', 'south')
                             : sprite.id === 'iron-giant'
                               ? await loadIronGiantFrames('idle', 'south')
-                              : await loadBearFrames('idle', 'south');
+                              : sprite.id === 'ghostfreak'
+                                ? await loadGhostfreakFrames('idle', 'south')
+                                : await loadBearFrames('idle', 'south');
         if (cancelled || !frames.length) return;
         let index = 0;
         drawImageFrame(frames[0]!);

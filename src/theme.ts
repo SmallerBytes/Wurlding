@@ -4,7 +4,13 @@ import { isCritterGenre, type CritterGenre } from './data/pixelCritters';
 export type AppTheme = 'dark' | 'light';
 export type MotionPref = 'on' | 'off';
 export type { CritterGenre };
-export type AppPreferences = { theme: AppTheme; motion: MotionPref; critters: CritterGenre };
+export type AppPreferences = {
+  theme: AppTheme;
+  motion: MotionPref;
+  critters: CritterGenre;
+  /** When true, companions also roam a transparent always-on-top desktop overlay. */
+  desktopCompanions?: boolean;
+};
 
 export const THEME_STORAGE_KEY = 'wurlding:theme';
 export const THEME_EVENT = 'wurlding:theme';
@@ -12,6 +18,8 @@ export const MOTION_STORAGE_KEY = 'wurlding:motion';
 export const MOTION_EVENT = 'wurlding:motion';
 export const CRITTERS_STORAGE_KEY = 'wurlding:critters';
 export const CRITTERS_EVENT = 'wurlding:critters';
+export const DESKTOP_COMPANIONS_STORAGE_KEY = 'wurlding:desktop-companions';
+export const DESKTOP_COMPANIONS_EVENT = 'wurlding:desktop-companions';
 
 export const DEFAULT_THEME: AppTheme = 'dark';
 export const DEFAULT_CRITTERS: CritterGenre = 'fae-princess';
@@ -127,13 +135,44 @@ export function setCritters(genre: CritterGenre): void {
   previewCritters(genre);
 }
 
+export function getStoredDesktopCompanions(): boolean {
+  try {
+    return localStorage.getItem(DESKTOP_COMPANIONS_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function previewDesktopCompanions(enabled: boolean): void {
+  window.dispatchEvent(new CustomEvent(DESKTOP_COMPANIONS_EVENT, { detail: enabled }));
+}
+
+export function setDesktopCompanions(enabled: boolean): void {
+  try {
+    localStorage.setItem(DESKTOP_COMPANIONS_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    // ignore
+  }
+  previewDesktopCompanions(enabled);
+  try {
+    window.wurldingDesktop?.setDesktopCompanions?.(enabled);
+  } catch {
+    // Browser / non-Electron.
+  }
+}
+
 /** Preferences stored beside the world data file. Null when the user has never saved. */
 export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
   try {
     const res = await fetch(`${API_BASE}/api/preferences`);
     if (!res.ok) return null;
     const json = (await res.json()) as {
-      data?: { theme?: unknown; motion?: unknown; critters?: unknown } | null;
+      data?: {
+        theme?: unknown;
+        motion?: unknown;
+        critters?: unknown;
+        desktopCompanions?: unknown;
+      } | null;
     };
     const data = json?.data;
     if (!data || !isAppTheme(data.theme) || !isMotionPref(data.motion)) return null;
@@ -147,6 +186,7 @@ export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
           : isCritterGenre(data.critters)
             ? data.critters
             : DEFAULT_CRITTERS,
+      desktopCompanions: data.desktopCompanions === true,
     };
   } catch {
     return null;
@@ -168,6 +208,9 @@ export async function savePreferences(prefs: AppPreferences): Promise<boolean> {
   setTheme(prefs.theme);
   setMotion(prefs.motion);
   setCritters(prefs.critters);
+  if (typeof prefs.desktopCompanions === 'boolean') {
+    setDesktopCompanions(prefs.desktopCompanions);
+  }
   try {
     window.wurldingDesktop?.preferencesSaved(prefs);
   } catch {
