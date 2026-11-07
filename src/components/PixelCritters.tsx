@@ -4,7 +4,8 @@ import {
   MOTION_EVENT,
   getStoredCritters,
   getStoredMotion,
-  type CritterGenre,
+  normalizeCritterSelection,
+  type CritterSelection,
   type MotionPref,
 } from '../theme';
 import {
@@ -96,6 +97,7 @@ import {
   getCritterGenre,
   renderSpriteFrame,
   spriteSize,
+  type CritterGenre,
   type CritterId,
   type CritterSprite,
 } from '../data/pixelCritters';
@@ -293,6 +295,17 @@ function pickCast(genre: CritterGenre): CritterId[] {
   return pool.slice(0, info.count);
 }
 
+/** Merge every selected genre's cast (deduped) for multi-companion mode. */
+function pickCastSelection(selection: CritterSelection): CritterId[] {
+  const out: CritterId[] = [];
+  for (const genre of normalizeCritterSelection(selection)) {
+    for (const id of pickCast(genre)) {
+      if (!out.includes(id)) out.push(id);
+    }
+  }
+  return out;
+}
+
 function floorPerch(): Perch {
   return { el: null, x: 0, y: window.innerHeight - 1, w: window.innerWidth, h: 1 };
 }
@@ -351,6 +364,20 @@ function randomFloorTarget(c: Critter): void {
   c.ty = rand(pad, Math.max(pad + 1, vh - c.h - pad));
 }
 
+function isCompanionOverlay(): boolean {
+  return document.documentElement.getAttribute('data-companion-overlay') === 'true';
+}
+
+/**
+ * Free roam across the whole window. Walk-only atlases always do this; hoppers
+ * (Goblin / Sultan) also do it on the desktop overlay where there are no UI ledges.
+ */
+function usesFloorWander(c: Critter): boolean {
+  if (!c.sprite.imageAtlas) return false;
+  if (!c.sprite.hops) return true;
+  return isCompanionOverlay();
+}
+
 /**
  * Crabacus-style roam: pick points around the window and walk toward them so
  * facingFromDelta sees real dx/dy (not just east/west ledge shuffles).
@@ -377,12 +404,25 @@ function ensureMewFlourishFrames(c: Critter, pose: Extract<MewPose, 'roar' | 'au
 }
 
 function updateFloorWander(c: Critter, dt: number): void {
+  // Lie-down / wake are frame-driven; stay planted through the nap.
+  if (c.sleepPause) {
+    if (c.sleepPhase === 'lie-down' || c.sleepPhase === 'wake') return;
+    if (c.sleepPhase === 'hold') {
+      c.timer -= dt;
+      if (c.timer <= 0) beginBearWake(c);
+    }
+    return;
+  }
   switch (c.state) {
     case 'pause': {
       // Don't peel out of a pause mid flame/sword/kick — that cut flourishes short.
       if ((c.roarHold ?? 0) > 0 || (c.flourishWindup ?? 0) > 0 || mewLockedInFlourish(c)) break;
       c.timer -= dt;
       if (c.timer > 0) break;
+      if (c.sprite.id === 'alligator-bear' && c.sleepCooldown != null && c.sleepCooldown <= 0) {
+        beginBearSleep(c);
+        break;
+      }
       randomFloorTarget(c);
       c.state = 'walk';
       c.timer = rand(2.5, 6.5);
@@ -497,7 +537,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
   };
   if (sprite.kind === 'flyer') {
     randomSkyTarget(c);
-  } else if (sprite.imageAtlas && !sprite.hops) {
+  } else if (usesFloorWander(c)) {
     // Free roam across the window so all walk facings get used.
     randomFloorTarget(c);
     c.perch = null;
@@ -879,8 +919,8 @@ function updateGround(c: Critter, dt: number, perches: Perch[]): void {
   if (c.sprite.imageAtlas && !c.sleepPause && c.sleepCooldown != null) {
     c.sleepCooldown = Math.max(0, c.sleepCooldown - dt);
   }
-  // Walk-only atlas companions roam the floor in 8 directions (no ledge hopping).
-  if (c.sprite.imageAtlas && !c.sprite.hops) {
+  // Walk-only atlases always free-roam; hoppers free-roam on the desktop overlay.
+  if (usesFloorWander(c)) {
     updateFloorWander(c, dt);
     return;
   }
@@ -1772,7 +1812,7 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
  */
 export default function PixelCritters() {
   const [motion, setMotion] = useState<MotionPref>(() => getStoredMotion());
-  const [genre, setGenre] = useState<CritterGenre>(() => getStoredCritters());
+  const [selection, setSelection] = useState<CritterSelection>(() => getStoredCritters());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -1781,8 +1821,7 @@ export default function PixelCritters() {
       if (d === 'on' || d === 'off') setMotion(d);
     };
     const onCritters = (e: Event) => {
-      const d = (e as CustomEvent<CritterGenre>).detail;
-      if (typeof d === 'string') setGenre(d);
+      setSelection(normalizeCritterSelection((e as CustomEvent<unknown>).detail));
     };
     window.addEventListener(MOTION_EVENT, onMotion);
     window.addEventListener(CRITTERS_EVENT, onCritters);
@@ -1792,7 +1831,7 @@ export default function PixelCritters() {
     };
   }, []);
 
-  const active = motion === 'on' && genre !== 'off';
+  const active = motion === 'on' && selection.length > 0;
 
   useEffect(() => {
     if (!active) return;
@@ -1885,7 +1924,7 @@ export default function PixelCritters() {
     document.addEventListener('visibilitychange', onVisibility);
 
     void (async () => {
-      const cast = pickCast(genre);
+      const cast = pickCastSelection(selection);
       const atlasById = new Map<CritterId, Map<string, HTMLCanvasElement[]>>();
       await Promise.all(
         cast.map(async (id) => {
@@ -1919,7 +1958,7 @@ export default function PixelCritters() {
       document.removeEventListener('visibilitychange', onVisibility);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [active, genre, atlasRev]);
+  }, [active, selection.join(','), atlasRev]);
 
   if (!active) return null;
 

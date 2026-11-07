@@ -4,13 +4,56 @@ import { isCritterGenre, type CritterGenre } from './data/pixelCritters';
 export type AppTheme = 'dark' | 'light';
 export type MotionPref = 'on' | 'off';
 export type { CritterGenre };
+/** Selected companion genres. Empty means off. Never includes `'off'`. */
+export type CritterSelection = CritterGenre[];
 export type AppPreferences = {
   theme: AppTheme;
   motion: MotionPref;
-  critters: CritterGenre;
+  critters: CritterSelection;
   /** When true, companions also roam a transparent always-on-top desktop overlay. */
   desktopCompanions?: boolean;
 };
+
+/** Soft cap so the window doesn't fill with every cast at once. */
+export const MAX_CRITTER_SELECTIONS = 5;
+
+export function normalizeCritterSelection(raw: unknown): CritterSelection {
+  if (raw == null || raw === 'off') return [];
+  if (raw === 'fae') return ['fae-princess'];
+  if (typeof raw === 'string') {
+    if (raw.startsWith('[')) {
+      try {
+        return normalizeCritterSelection(JSON.parse(raw) as unknown);
+      } catch {
+        return [];
+      }
+    }
+    return isCritterGenre(raw) && raw !== 'off' ? [raw] : [];
+  }
+  if (Array.isArray(raw)) {
+    const out: CritterGenre[] = [];
+    for (const item of raw) {
+      const g = item === 'fae' ? 'fae-princess' : item;
+      if (!isCritterGenre(g) || g === 'off') continue;
+      if (!out.includes(g)) out.push(g);
+      if (out.length >= MAX_CRITTER_SELECTIONS) break;
+    }
+    return out;
+  }
+  return [];
+}
+
+export function serializeCritterSelection(sel: CritterSelection): string {
+  const normalized = normalizeCritterSelection(sel);
+  if (normalized.length === 0) return 'off';
+  if (normalized.length === 1) return normalized[0]!;
+  return JSON.stringify(normalized);
+}
+
+export function sameCritterSelection(a: CritterSelection, b: CritterSelection): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((g, i) => g === b[i]);
+}
 
 export const THEME_STORAGE_KEY = 'wurlding:theme';
 export const THEME_EVENT = 'wurlding:theme';
@@ -22,7 +65,7 @@ export const DESKTOP_COMPANIONS_STORAGE_KEY = 'wurlding:desktop-companions';
 export const DESKTOP_COMPANIONS_EVENT = 'wurlding:desktop-companions';
 
 export const DEFAULT_THEME: AppTheme = 'dark';
-export const DEFAULT_CRITTERS: CritterGenre = 'fae-princess';
+export const DEFAULT_CRITTERS: CritterSelection = ['fae-princess'];
 
 export function isAppTheme(value: unknown): value is AppTheme {
   return value === 'dark' || value === 'light';
@@ -108,31 +151,34 @@ function isMotionPref(value: unknown): value is MotionPref {
   return value === 'on' || value === 'off';
 }
 
-/** Which pixel companions roam the window. */
-export function getStoredCritters(): CritterGenre {
+/** Which pixel companions roam the window (empty = none). */
+export function getStoredCritters(): CritterSelection {
   try {
     const raw = localStorage.getItem(CRITTERS_STORAGE_KEY);
-    // Fae Court was replaced by Fae Princess.
-    if (raw === 'fae') return 'fae-princess';
-    if (isCritterGenre(raw)) return raw;
+    const parsed = normalizeCritterSelection(raw);
+    if (raw == null) return [...DEFAULT_CRITTERS];
+    return parsed;
   } catch {
     // ignore
   }
-  return DEFAULT_CRITTERS;
+  return [...DEFAULT_CRITTERS];
 }
 
 /** Switch companions in this window without writing the saved preference. */
-export function previewCritters(genre: CritterGenre): void {
-  window.dispatchEvent(new CustomEvent(CRITTERS_EVENT, { detail: genre }));
+export function previewCritters(selection: CritterSelection): void {
+  window.dispatchEvent(
+    new CustomEvent(CRITTERS_EVENT, { detail: normalizeCritterSelection(selection) }),
+  );
 }
 
-export function setCritters(genre: CritterGenre): void {
+export function setCritters(selection: CritterSelection): void {
+  const normalized = normalizeCritterSelection(selection);
   try {
-    localStorage.setItem(CRITTERS_STORAGE_KEY, genre);
+    localStorage.setItem(CRITTERS_STORAGE_KEY, serializeCritterSelection(normalized));
   } catch {
     // ignore
   }
-  previewCritters(genre);
+  previewCritters(normalized);
 }
 
 export function getStoredDesktopCompanions(): boolean {
@@ -176,16 +222,13 @@ export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
     };
     const data = json?.data;
     if (!data || !isAppTheme(data.theme) || !isMotionPref(data.motion)) return null;
+    const critters =
+      data.critters === undefined ? [...DEFAULT_CRITTERS] : normalizeCritterSelection(data.critters);
     return {
       theme: data.theme,
       motion: data.motion,
       // Older preference files predate companions; fall back to the default cast.
-      critters:
-        data.critters === 'fae'
-          ? 'fae-princess'
-          : isCritterGenre(data.critters)
-            ? data.critters
-            : DEFAULT_CRITTERS,
+      critters: data.critters === undefined ? [...DEFAULT_CRITTERS] : critters,
       desktopCompanions: data.desktopCompanions === true,
     };
   } catch {

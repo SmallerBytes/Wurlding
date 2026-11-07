@@ -26,7 +26,7 @@ export default function SecretCritterUnlock() {
     const tryUnlock = () => {
       if (!(held.current.a && held.current.b)) return;
       const first = unlockAlligatorBear();
-      setCritters('alligator-bear');
+      setCritters(['alligator-bear']);
       showToast(first ? 'Sultan of Scales unlocked.' : 'Sultan of Scales answers the call.');
       clearChord();
     };

@@ -1,26 +1,61 @@
 import { useEffect, useRef, useState } from 'react';
-import { Settings as SettingsIcon, Moon, Sun, Sparkles, BookOpen, Ghost, ChevronDown } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Moon,
+  Sun,
+  Sparkles,
+  BookOpen,
+  Ghost,
+  ChevronDown,
+  Download,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { WHATS_NEW } from '../data/whatsNew';
-import { CRITTERS, visibleCritterGenres, isCritterGenre } from '../data/pixelCritters';
+import { CRITTERS, visibleCritterGenres } from '../data/pixelCritters';
 import PixelSpritePreview from '../components/PixelSpritePreview';
 import {
   CRITTERS_EVENT,
+  MAX_CRITTER_SELECTIONS,
   MOTION_EVENT,
   THEME_EVENT,
   getStoredCritters,
   getStoredDesktopCompanions,
   getStoredMotion,
   getStoredTheme,
+  normalizeCritterSelection,
   previewCritters,
   previewMotion,
   previewTheme,
+  sameCritterSelection,
   savePreferences,
   setDesktopCompanions,
   type AppPreferences,
   type AppTheme,
   type CritterGenre,
+  type CritterSelection,
   type MotionPref,
 } from '../theme';
+
+const DESKTOP_BACKGROUNDS = [
+  {
+    id: 'forest-stream',
+    title: 'Forest stream clearing',
+    alt: 'Pixel-art forest stream clearing with a winding path, waterfall, and sunbeams',
+    file: 'forest-stream-clearing.png',
+    download: 'wurlding-forest-stream-clearing.png',
+  },
+  {
+    id: 'sunlit-woodland',
+    title: 'Sunlit woodland clearing',
+    alt: 'Pixel-art sunlit woodland clearing with a dirt path, trees, mushrooms, and god rays',
+    file: 'sunlit-woodland-clearing.png',
+    download: 'wurlding-sunlit-woodland-clearing.png',
+  },
+] as const;
+
+function desktopBgUrl(file: string): string {
+  return `${import.meta.env.BASE_URL}desktop-backgrounds/${file}`;
+}
 
 function formatEntryDate(iso: string): string {
   const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
@@ -41,7 +76,7 @@ function samePrefs(a: AppPreferences, b: AppPreferences): boolean {
   return (
     a.theme === b.theme &&
     a.motion === b.motion &&
-    a.critters === b.critters &&
+    sameCritterSelection(a.critters, b.critters) &&
     Boolean(a.desktopCompanions) === Boolean(b.desktopCompanions)
   );
 }
@@ -99,8 +134,7 @@ export default function Settings() {
     };
     const onCritters = (e: Event) => {
       if (applyingLocal.current) return;
-      const detail = (e as CustomEvent<CritterGenre>).detail;
-      if (!isCritterGenre(detail)) return;
+      const detail = normalizeCritterSelection((e as CustomEvent<unknown>).detail);
       setDraft((d) => ({ ...d, critters: detail }));
       setSaved((s) => ({ ...s, critters: detail }));
       setSaveState('idle');
@@ -133,27 +167,42 @@ export default function Settings() {
     setSaveState('idle');
   };
 
-  const chooseCritters = (next: CritterGenre) => {
-    if (next === draft.critters) return;
+  const applyCritterSelection = (next: CritterSelection) => {
+    const normalized = normalizeCritterSelection(next);
+    if (sameCritterSelection(normalized, draft.critters)) return;
     applyingLocal.current = true;
-    previewCritters(next);
-    if (next === 'off' && draft.desktopCompanions) {
+    previewCritters(normalized);
+    if (normalized.length === 0 && draft.desktopCompanions) {
       setDesktopCompanions(false);
     }
     applyingLocal.current = false;
     setDraft((d) => ({
       ...d,
-      critters: next,
-      desktopCompanions: next === 'off' ? false : d.desktopCompanions,
+      critters: normalized,
+      desktopCompanions: normalized.length === 0 ? false : d.desktopCompanions,
     }));
-    if (next === 'off') {
+    if (normalized.length === 0) {
       setSaved((s) => ({ ...s, desktopCompanions: false }));
     }
     setSaveState('idle');
   };
 
+  const toggleCritter = (id: CritterGenre) => {
+    if (id === 'off') {
+      applyCritterSelection([]);
+      return;
+    }
+    const selected = new Set(draft.critters);
+    if (selected.has(id)) selected.delete(id);
+    else {
+      if (selected.size >= MAX_CRITTER_SELECTIONS) return;
+      selected.add(id);
+    }
+    applyCritterSelection([...selected]);
+  };
+
   const toggleDesktopCompanions = () => {
-    if (draft.critters === 'off' || draft.motion === 'off') return;
+    if (draft.critters.length === 0 || draft.motion === 'off') return;
     const next = !draft.desktopCompanions;
     applyingLocal.current = true;
     setDesktopCompanions(next);
@@ -301,31 +350,40 @@ export default function Settings() {
             </h2>
             <p className="text-sm text-mist">
               Little creatures that wander the window: perching on headings, strolling along
-              the tops of cards, hopping between panels, and circling your work. Pick a companion
-              to choose who shows up.
+              the tops of cards, hopping between panels, and circling your work. Select one or
+              more companions — up to {MAX_CRITTER_SELECTIONS} at once.
               {!motionOn && ' They stay hidden while animations are off.'}
             </p>
           </div>
 
           <div
             className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
-            role="radiogroup"
-            aria-label="Pixel companion"
+            role="group"
+            aria-label="Pixel companions"
           >
             {visibleCritterGenres().map((genre) => {
-              const selected = draft.critters === genre.id;
+              const selected =
+                genre.id === 'off' ? draft.critters.length === 0 : draft.critters.includes(genre.id);
               const preview = Array.from(new Set(genre.cast)).slice(0, 3);
+              const atCap =
+                genre.id !== 'off' &&
+                !selected &&
+                draft.critters.length >= MAX_CRITTER_SELECTIONS;
               return (
                 <button
                   key={genre.id}
                   type="button"
-                  role="radio"
+                  role="checkbox"
                   aria-checked={selected}
-                  onClick={() => chooseCritters(genre.id)}
+                  aria-disabled={atCap || undefined}
+                  disabled={atCap}
+                  onClick={() => toggleCritter(genre.id)}
                   className={`flex h-full flex-col gap-2 rounded-lg border p-3 text-left transition ${
                     selected
                       ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
-                      : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
+                      : atCap
+                        ? 'cursor-not-allowed border-dusk/40 bg-abyss/30 opacity-50'
+                        : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
                   }`}
                 >
                   <span className="flex h-12 items-end gap-2" aria-hidden>
@@ -352,15 +410,15 @@ export default function Settings() {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-dusk/60 pt-4">
-            {draft.critters !== 'off' && motionOn && (
+            {draft.critters.length > 0 && motionOn && (
               <p className="text-sm text-mist">
                 {draft.desktopCompanions
-                  ? 'Companion is on your desktop and stays while Wurlding is open — even minimized.'
-                  : 'Add this companion to your desktop so it keeps roaming after you minimize Wurlding.'}
+                  ? 'Companions are on your desktop and stay while Wurlding is open — even minimized.'
+                  : 'Add companions to your desktop so they keep roaming after you minimize Wurlding.'}
               </p>
             )}
             <div className="flex flex-wrap items-center justify-start gap-3">
-              {draft.critters !== 'off' && motionOn && (
+              {draft.critters.length > 0 && motionOn && (
                 <button
                   type="button"
                   className={draft.desktopCompanions ? 'btn-secondary' : 'btn-primary'}
@@ -385,6 +443,48 @@ export default function Settings() {
               {saveState === 'idle' && dirty && 'Save to keep this theme, animation, and companion choice the next time you open Wurlding.'}
               {saveState === 'idle' && !dirty && 'Saved appearance, animations, and companions are used the next time you open Wurlding.'}
             </p>
+          </div>
+        </section>
+
+        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="desktop-bg-heading">
+          <div>
+            <h2 id="desktop-bg-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
+              <ImageIcon className="h-5 w-5 text-fey" aria-hidden />
+              Companion desktop backgrounds
+            </h2>
+            <p className="text-sm text-mist">
+              Pixel clearings you can set as wallpaper so desktop companions have a fitting place to
+              roam.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {DESKTOP_BACKGROUNDS.map((bg) => {
+              const href = desktopBgUrl(bg.file);
+              return (
+                <figure
+                  key={bg.id}
+                  className="flex flex-col gap-3 overflow-hidden rounded-lg border border-dusk/60 bg-abyss/40"
+                >
+                  <img
+                    src={href}
+                    alt={bg.alt}
+                    className="max-h-52 w-full object-cover object-center"
+                    loading="lazy"
+                  />
+                  <figcaption className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
+                    <span className="font-[Cinzel] text-sm font-semibold text-moonlight">{bg.title}</span>
+                    <a
+                      className="btn-secondary inline-flex items-center gap-2"
+                      href={href}
+                      download={bg.download}
+                    >
+                      <Download className="h-4 w-4" aria-hidden />
+                      Download
+                    </a>
+                  </figcaption>
+                </figure>
+              );
+            })}
           </div>
         </section>
 

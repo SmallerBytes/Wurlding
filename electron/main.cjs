@@ -31,12 +31,44 @@ let downloadProgressWindow = null;
 let currentAppTheme = 'dark';
 /** Whimsical animations preference mirrored from the renderer (`on` | `off`). */
 let currentMotion = 'on';
-/** Pixel companion genre mirrored from the renderer (see src/data/pixelCritters.ts). */
+/** Pixel companion genre(s) mirrored from the renderer (string or string[]). */
 let currentCritters = 'fae-princess';
 /** Companions roam a desktop overlay even when the main window is minimized. */
 let currentDesktopCompanions = false;
 
 const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const MAX_CRITTER_SELECTIONS = 5;
+
+function normalizeCritters(raw) {
+  if (raw == null || raw === 'off') return 'off';
+  if (raw === 'fae') return 'fae-princess';
+  if (typeof raw === 'string' && CRITTER_GENRES.includes(raw)) return raw;
+  if (Array.isArray(raw)) {
+    const list = [];
+    for (const item of raw) {
+      const g = item === 'fae' ? 'fae-princess' : item;
+      if (!CRITTER_GENRES.includes(g) || g === 'off') continue;
+      if (!list.includes(g)) list.push(g);
+      if (list.length >= MAX_CRITTER_SELECTIONS) break;
+    }
+    if (list.length === 0) return 'off';
+    if (list.length === 1) return list[0];
+    return list;
+  }
+  return null;
+}
+
+function crittersStorageValue(critters) {
+  const normalized = normalizeCritters(critters) ?? 'fae-princess';
+  if (normalized === 'off') return 'off';
+  if (Array.isArray(normalized)) return JSON.stringify(normalized);
+  return normalized;
+}
+
+function crittersActive(critters) {
+  const normalized = normalizeCritters(critters);
+  return normalized != null && normalized !== 'off';
+}
 
 const revealedWindows = new WeakSet();
 
@@ -71,8 +103,7 @@ function readDiskPreferences() {
     const theme = raw?.theme === 'dark' || raw?.theme === 'light' ? raw.theme : null;
     const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
     if (!theme || !motion) return null;
-    const rawCritters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
-    const critters = CRITTER_GENRES.includes(rawCritters) ? rawCritters : currentCritters;
+    const critters = normalizeCritters(raw?.critters) ?? currentCritters;
     const desktopCompanions = raw?.desktopCompanions === true;
     return { theme, motion, critters, desktopCompanions };
   } catch {
@@ -105,27 +136,29 @@ function isAppWindow(win) {
 }
 
 function prefsScript(theme, motion, critters, desktopCompanions) {
-  const safeCritters = CRITTER_GENRES.includes(critters) ? critters : 'fae-princess';
+  const safeCritters = normalizeCritters(critters) ?? 'fae-princess';
+  const storageCritters = crittersStorageValue(safeCritters);
+  const eventCritters = safeCritters === 'off' ? [] : Array.isArray(safeCritters) ? safeCritters : [safeCritters];
   const desk = desktopCompanions === true;
   return `(function () {
     try {
       localStorage.setItem('wurlding:theme', ${JSON.stringify(theme)});
       localStorage.setItem('wurlding:motion', ${JSON.stringify(motion)});
-      localStorage.setItem('wurlding:critters', ${JSON.stringify(safeCritters)});
+      localStorage.setItem('wurlding:critters', ${JSON.stringify(storageCritters)});
       localStorage.setItem('wurlding:desktop-companions', ${JSON.stringify(desk ? '1' : '0')});
       document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});
       document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
       document.documentElement.setAttribute('data-motion', ${JSON.stringify(motion)});
       window.dispatchEvent(new CustomEvent('wurlding:theme', { detail: ${JSON.stringify(theme)} }));
       window.dispatchEvent(new CustomEvent('wurlding:motion', { detail: ${JSON.stringify(motion)} }));
-      window.dispatchEvent(new CustomEvent('wurlding:critters', { detail: ${JSON.stringify(safeCritters)} }));
+      window.dispatchEvent(new CustomEvent('wurlding:critters', { detail: ${JSON.stringify(eventCritters)} }));
       window.dispatchEvent(new CustomEvent('wurlding:desktop-companions', { detail: ${desk} }));
     } catch (e) {}
   })();`;
 }
 
 function overlayShouldShow() {
-  return currentDesktopCompanions && currentCritters !== 'off' && currentMotion === 'on';
+  return currentDesktopCompanions && crittersActive(currentCritters) && currentMotion === 'on';
 }
 
 function destroyCompanionOverlay() {
@@ -818,14 +851,14 @@ function createApplicationMenu() {
 ipcMain.on('preferences-saved', (_event, prefs) => {
   const theme = prefs?.theme === 'dark' || prefs?.theme === 'light' ? prefs.theme : currentAppTheme;
   const motion = prefs?.motion === 'on' || prefs?.motion === 'off' ? prefs.motion : currentMotion;
-  const critters = CRITTER_GENRES.includes(prefs?.critters) ? prefs.critters : currentCritters;
+  const critters = normalizeCritters(prefs?.critters) ?? currentCritters;
   currentAppTheme = theme;
   currentMotion = motion;
   currentCritters = critters;
   if (typeof prefs?.desktopCompanions === 'boolean') {
     currentDesktopCompanions = prefs.desktopCompanions;
   }
-  if (currentCritters === 'off' || currentMotion === 'off') {
+  if (!crittersActive(currentCritters) || currentMotion === 'off') {
     currentDesktopCompanions = false;
   }
   try {

@@ -68,6 +68,26 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
 }
 
 const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const MAX_CRITTER_SELECTIONS = 5;
+
+function normalizeCritters(raw) {
+  if (raw == null || raw === 'off') return 'off';
+  if (raw === 'fae') return 'fae-princess';
+  if (typeof raw === 'string' && CRITTER_GENRES.includes(raw)) return raw;
+  if (Array.isArray(raw)) {
+    const list = [];
+    for (const item of raw) {
+      const g = item === 'fae' ? 'fae-princess' : item;
+      if (!CRITTER_GENRES.includes(g) || g === 'off') continue;
+      if (!list.includes(g)) list.push(g);
+      if (list.length >= MAX_CRITTER_SELECTIONS) break;
+    }
+    if (list.length === 0) return 'off';
+    if (list.length === 1) return list[0];
+    return list;
+  }
+  return null;
+}
 
 function readPreferences() {
   if (!fs.existsSync(PREFS_FILE)) return null;
@@ -77,8 +97,8 @@ function readPreferences() {
     const motion = raw?.motion === 'on' || raw?.motion === 'off' ? raw.motion : null;
     if (!theme || !motion) return null;
     const prefs = { theme, motion };
-    const critters = raw?.critters === 'fae' ? 'fae-princess' : raw?.critters;
-    if (CRITTER_GENRES.includes(critters)) prefs.critters = critters;
+    const critters = normalizeCritters(raw?.critters === 'fae' ? 'fae-princess' : raw?.critters);
+    if (critters != null) prefs.critters = critters;
     if (raw?.desktopCompanions === true) prefs.desktopCompanions = true;
     return prefs;
   } catch {
@@ -474,9 +494,13 @@ app.put('/api/preferences', (req, res) => {
   if (!theme || !motion) {
     return res.status(400).json({ ok: false, error: 'Expected theme (light|dark) and motion (on|off).' });
   }
-  const critters = req.body?.critters;
-  if (critters !== undefined && !CRITTER_GENRES.includes(critters)) {
-    return res.status(400).json({ ok: false, error: `Expected critters to be one of ${CRITTER_GENRES.join(', ')}.` });
+  const crittersRaw = req.body?.critters;
+  const critters = crittersRaw === undefined ? undefined : normalizeCritters(crittersRaw);
+  if (crittersRaw !== undefined && critters == null) {
+    return res.status(400).json({
+      ok: false,
+      error: `Expected critters to be one of ${CRITTER_GENRES.join(', ')}, or an array of those (except off).`,
+    });
   }
   try {
     const prefs = { theme, motion };

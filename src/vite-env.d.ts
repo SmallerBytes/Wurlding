@@ -6,7 +6,7 @@ interface WurldingDesktopBridge {
   preferencesSaved: (prefs: {
     theme: 'light' | 'dark';
     motion: 'on' | 'off';
-    critters: string;
+    critters: string | string[];
     desktopCompanions?: boolean;
   }) => void;
   setDesktopCompanions?: (enabled: boolean) => void;

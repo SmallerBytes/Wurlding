@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.28',
+    date: '2026-11-07',
+    title: 'Multi companions, desktop roam, and wallpapers',
+    bullets: [
+      'Select up to five companions at once.',
+      'Goblin Warrior Priest and Sultan of Scales free-roam the whole desktop when added to screen.',
+      'New companion desktop backgrounds to preview and download: forest stream clearing and sunlit woodland clearing.',
+    ],
+  },
+  {
     version: '0.1.27',
     date: '2026-11-07',
     title: 'Mew to-bubble frames in installed builds',
