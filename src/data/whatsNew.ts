@@ -11,6 +11,15 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.27',
+    date: '2026-11-07',
+    title: 'Mew to-bubble frames in installed builds',
+    bullets: [
+      'Installed app now plays mew_to_bubble when rolling from south idle into the bubble (was localhost-only).',
+      'Companion PNG frames are unpacked from the asar so Electron can decode the morph reliably.',
+    ],
+  },
+  {
     version: '0.1.26',
     date: '2026-11-07',
     title: 'Mew bubble burst sequence fix',

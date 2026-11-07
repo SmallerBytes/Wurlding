@@ -38,7 +38,7 @@ export const MEW_TO_BUBBLE_FRAME_TIME = 0.12;
 export const MEW_POP_FRAME_TIME = 0.11;
 /** Sink_downward_while_pulling_knees_toward_the_chest oneshot. */
 export const MEW_SINK_FRAME_TIME = 0.09;
-export const MEW_ATLAS_REV = 7;
+export const MEW_ATLAS_REV = 8;
 
 const IDLE_FRAME_COUNT = 8;
 const WALK_FRAME_COUNT = 13;
@@ -46,8 +46,11 @@ const TO_BUBBLE_FRAME_COUNT = 41;
 const BUBBLE_WALK_FRAME_COUNT = 13;
 const POP_FRAME_COUNT = 25;
 const SINK_FRAME_COUNT = 41;
+const LOAD_BATCH = 8;
 
 type MewFolder = 'idle' | 'walk' | 'to-bubble' | 'bubble-walk' | 'pop' | 'sink';
+/** Oneshot clips need real frames — asar Image decode used to pad with duplicates. */
+const ONESHOT_FOLDERS = new Set<MewFolder>(['to-bubble', 'pop', 'sink']);
 
 function frameUrl(pose: MewFolder, facing: MewFacing, index: number): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -57,22 +60,51 @@ function frameUrl(pose: MewFolder, facing: MewFacing, index: number): string {
 
 const animCache = new Map<string, HTMLCanvasElement[]>();
 
-async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
-  if (typeof document === 'undefined') return null;
-  const img = new Image();
-  img.src = url;
-  try {
-    await img.decode();
-  } catch {
-    return null;
-  }
+function canvasFromImage(img: CanvasImageSource, w: number, h: number): HTMLCanvasElement | null {
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || MEW_SIZE;
-  canvas.height = img.naturalHeight || MEW_SIZE;
+  canvas.width = w || MEW_SIZE;
+  canvas.height = h || MEW_SIZE;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, 0, 0);
+  return canvas;
+}
+
+async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
+  if (typeof document === 'undefined') return null;
+  // Prefer fetch+blob — more reliable than Image() against Electron asar/file URLs.
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      try {
+        const img = new Image();
+        img.src = objUrl;
+        await img.decode();
+        return canvasFromImage(img, img.naturalWidth, img.naturalHeight);
+      } finally {
+        URL.revokeObjectURL(objUrl);
+      }
+    }
+  } catch {
+    // fall through to Image src
+  }
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return canvasFromImage(img, img.naturalWidth, img.naturalHeight);
+  } catch {
+    return null;
+  }
+}
+
+async function loadPngReliable(url: string): Promise<HTMLCanvasElement | null> {
+  let canvas = await loadPng(url);
+  if (!canvas) canvas = await loadPng(url);
+  if (!canvas) canvas = await loadPng(url);
   return canvas;
 }
 
@@ -85,14 +117,32 @@ async function loadFrameSequence(
   const cached = animCache.get(key);
   if (cached) return cached;
 
-  const loaded = await Promise.all(
-    Array.from({ length: count }, async (_, i) => {
-      const url = frameUrl(pose, facing, i);
-      let canvas = await loadPng(url);
-      if (!canvas) canvas = await loadPng(url);
-      return canvas;
-    }),
-  );
+  const loaded: (HTMLCanvasElement | null)[] = new Array(count).fill(null);
+  // Batch loads so Electron asar/file:// doesn't drop frames under stampede.
+  for (let start = 0; start < count; start += LOAD_BATCH) {
+    const end = Math.min(count, start + LOAD_BATCH);
+    const chunk = await Promise.all(
+      Array.from({ length: end - start }, async (_, offset) => {
+        const i = start + offset;
+        return loadPngReliable(frameUrl(pose, facing, i));
+      }),
+    );
+    for (let offset = 0; offset < chunk.length; offset++) {
+      loaded[start + offset] = chunk[offset] ?? null;
+    }
+  }
+
+  // Retry holes sequentially — oneshots must not be padded into a frozen morph.
+  for (let i = 0; i < count; i++) {
+    if (!loaded[i]) loaded[i] = await loadPngReliable(frameUrl(pose, facing, i));
+  }
+
+  const okCount = loaded.filter(Boolean).length;
+  if (ONESHOT_FOLDERS.has(pose) && okCount < Math.ceil(count * 0.85)) {
+    // Fail closed so gameplay waits / retries instead of playing a static fake clip.
+    return [];
+  }
+
   let fallback: HTMLCanvasElement | null = null;
   for (const canvas of loaded) {
     if (canvas) {
@@ -137,6 +187,14 @@ export async function loadMewFrames(
 
 export async function preloadMew(): Promise<Map<string, HTMLCanvasElement[]>> {
   const map = new Map<string, HTMLCanvasElement[]>();
+  // Flourish clips first — these are the ones that went missing in packaged builds.
+  const toBubble = await loadMewFrames('roar', 'south');
+  if (toBubble.length) map.set('roar:south', toBubble);
+  const pop = await loadMewFrames('aura', 'south');
+  if (pop.length) map.set('aura:south', pop);
+  const sink = await loadMewFrames('kick', 'south');
+  if (sink.length) map.set('kick:south', sink);
+
   await Promise.all(
     MEW_FACINGS.map(async (facing) => {
       const idle = await loadMewFrames('idle', facing);
@@ -147,11 +205,12 @@ export async function preloadMew(): Promise<Map<string, HTMLCanvasElement[]>> {
       if (bubble.length) map.set(`bubble-walk:${facing}`, bubble);
     }),
   );
-  const toBubble = await loadMewFrames('roar', 'south');
-  if (toBubble.length) map.set('roar:south', toBubble);
-  const pop = await loadMewFrames('aura', 'south');
-  if (pop.length) map.set('aura:south', pop);
-  const sink = await loadMewFrames('kick', 'south');
-  if (sink.length) map.set('kick:south', sink);
+
+  // One more attempt if the packaged asar path was still warming up.
+  if (!map.has('roar:south')) {
+    animCache.delete(`mew${MEW_ATLAS_REV}:to-bubble:south`);
+    const retry = await loadMewFrames('roar', 'south');
+    if (retry.length) map.set('roar:south', retry);
+  }
   return map;
 }

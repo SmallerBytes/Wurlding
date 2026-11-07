@@ -17,6 +17,9 @@
   ],
   "extraResources": [],
   "asar": true,
+  "asarUnpack": [
+    "**/dist/critters/**"
+  ],
   "win": {
     "icon": "build/app-icon.png",
     "signAndEditExecutable": false,

@@ -1374,7 +1374,9 @@ function syncBearPose(c: Critter, dt: number): void {
           const pose: BearPose = doSink ? 'kick' : 'roar';
           const frames = c.bearFrames?.get(`${pose}:south`);
           if (!frames || frames.length < 2) {
-            c.roarTimer = rand(1.5, 3);
+            // Packaged builds sometimes need a second pass for to-bubble / sink.
+            ensureMewFlourishFrames(c, pose === 'kick' ? 'kick' : 'roar');
+            c.roarTimer = rand(1.2, 2.2);
             return;
           }
           if (!doSink) c.mewPhase = 'to-bubble';
