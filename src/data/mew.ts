@@ -34,11 +34,11 @@ export const MEW_FRAME_TIME = 0.1;
 export const MEW_WALK_FRAME_TIME = 0.09;
 /** Enter-bubble oneshot — slow enough to read the morph. */
 export const MEW_TO_BUBBLE_FRAME_TIME = 0.12;
-/** Bubble-pop oneshot. */
-export const MEW_POP_FRAME_TIME = 0.09;
+/** Bubble-pop oneshot — slow enough to read the burst. */
+export const MEW_POP_FRAME_TIME = 0.11;
 /** Sink_downward_while_pulling_knees_toward_the_chest oneshot. */
 export const MEW_SINK_FRAME_TIME = 0.09;
-export const MEW_ATLAS_REV = 6;
+export const MEW_ATLAS_REV = 7;
 
 const IDLE_FRAME_COUNT = 8;
 const WALK_FRAME_COUNT = 13;

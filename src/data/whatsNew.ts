@@ -11,6 +11,15 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.26',
+    date: '2026-11-07',
+    title: 'Mew bubble burst sequence fix',
+    bullets: [
+      'Mew now finishes the full cycle: moving bubble → face south → bubble burst → south idle.',
+      'Bubble exit can no longer skip the pop; still never uses mew_in_a_ball/rotations.',
+    ],
+  },
+  {
     version: '0.1.25',
     date: '2026-11-07',
     title: 'Update notes scrollbar and companion fixes',

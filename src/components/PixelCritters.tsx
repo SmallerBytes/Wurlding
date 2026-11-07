@@ -81,7 +81,9 @@ import {
   MEW_SINK_FRAME_TIME,
   MEW_TO_BUBBLE_FRAME_TIME,
   MEW_WALK_FRAME_TIME,
+  loadMewFrames,
   preloadMew,
+  type MewPose,
 } from '../data/mew';
 import {
   VOID_ATTACK_DRAW_SCALE,
@@ -362,6 +364,16 @@ function mewLockedInFlourish(c: Critter): boolean {
     phase === 'pop' ||
     (c.roarHold ?? 0) > 0
   );
+}
+
+/** Lazy-load Mew flourish clips only (never mew_in_a_ball/rotations). */
+function ensureMewFlourishFrames(c: Critter, pose: Extract<MewPose, 'roar' | 'aura' | 'kick'>): void {
+  if (!c.bearFrames) return;
+  const key = `${pose}:south`;
+  if (c.bearFrames.has(key)) return;
+  void loadMewFrames(pose, 'south').then((frames) => {
+    if (frames.length >= 2 && c.bearFrames) c.bearFrames.set(key, frames);
+  });
 }
 
 function updateFloorWander(c: Critter, dt: number): void {
@@ -1238,7 +1250,9 @@ function syncBearPose(c: Critter, dt: number): void {
     return;
   }
 
-  // Mew bubble → face south (pre-pop) → pop. Full sequence only; no early cut.
+  // Mew: moving_bubble → face south in bubble → pop burst → south idle.
+  // Always return while in these phases so pause/flourish logic can't skip the burst.
+  // Uses bubble-walk + pop only — never mew_in_a_ball/rotations.
   if (c.sprite.id === 'mew' && (c.roarHold ?? 0) <= 0) {
     if (c.mewPhase === 'bubble') {
       c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
@@ -1246,37 +1260,57 @@ function syncBearPose(c: Critter, dt: number): void {
         // Must face south in the bubble before the pop clip.
         c.mewPhase = 'pre-pop';
         c.bearFacing = 'south';
+        c.flourishFacing = 'south';
         c.bearPose = 'idle';
         c.state = 'pause';
-        c.mewBubbleTimer = 0.55;
+        c.mewBubbleTimer = rand(0.9, 1.35);
         c.frame = 0;
         c.frameClock = 0;
-        c.timer = Math.max(c.timer, 0.7);
+        c.timer = Math.max(c.timer, 1.6);
+        ensureMewFlourishFrames(c, 'aura');
         return;
       }
-    } else if (c.mewPhase === 'pre-pop') {
+      // Keep rolling in moving_bubble; do not fall through into flourish starters.
+      c.bearPose = c.state === 'walk' || c.state === 'approach' ? 'walk' : 'idle';
+      return;
+    }
+    if (c.mewPhase === 'pre-pop') {
+      c.bearFacing = 'south';
+      c.flourishFacing = 'south';
+      c.bearPose = 'idle';
+      c.state = 'pause';
+      c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
+      if ((c.mewBubbleTimer ?? 0) > 0) return;
+      const frames = c.bearFrames?.get('aura:south');
+      if (!frames || frames.length < 2) {
+        // Stay facing south in-bubble until pop frames are ready — never skip the burst.
+        ensureMewFlourishFrames(c, 'aura');
+        c.mewBubbleTimer = 0.35;
+        c.timer = Math.max(c.timer, 0.6);
+        return;
+      }
+      c.mewPhase = 'pop';
+      c.bearPose = 'aura';
+      c.bearFacing = 'south';
+      c.flourishFacing = 'south';
+      c.roarHold = frames.length * MEW_POP_FRAME_TIME + 0.35;
+      c.state = 'pause';
+      c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 2);
+      c.frame = 0;
+      c.frameClock = 0;
+      return;
+    }
+    if (c.mewPhase === 'pop') {
+      // roarHold should own the clip; if it cleared early, recover into south idle.
+      c.mewPhase = 'normal';
       c.bearFacing = 'south';
       c.bearPose = 'idle';
-      c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
-      if ((c.mewBubbleTimer ?? 0) <= 0) {
-        const frames = c.bearFrames?.get('aura:south');
-        if (frames && frames.length >= 2) {
-          c.mewPhase = 'pop';
-          c.bearPose = 'aura';
-          c.bearFacing = 'south';
-          c.flourishFacing = 'south';
-          c.roarHold = frames.length * MEW_POP_FRAME_TIME + 0.35;
-          c.state = 'pause';
-          c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 0.3);
-          c.frame = 0;
-          c.frameClock = 0;
-          return;
-        }
-        c.mewPhase = 'normal';
-        c.mewBubbleTimer = 0;
-      } else {
-        return;
-      }
+      c.state = 'pause';
+      c.timer = Math.max(c.timer, rand(2.2, 3.4));
+      c.roarTimer = rand(4, 7);
+      c.frame = 0;
+      c.frameClock = 0;
+      return;
     }
   }
 
@@ -1542,20 +1576,27 @@ function advanceFrame(c: Critter, dt: number): void {
             // mew_to_bubble finished → roll in moving_bubble for a good while.
             c.mewPhase = 'bubble';
             c.mewBubbleTimer = rand(9, 14);
+            c.roarHold = 0;
+            c.flourishFacing = undefined;
             c.bearPose = 'walk';
             c.state = 'walk';
             c.timer = rand(3, 5.5);
-            c.roarTimer = rand(8, 14);
+            // Don't let idle flourish logic interrupt the bubble cycle.
+            c.roarTimer = rand(16, 22);
             return;
           }
           if (c.sprite.id === 'mew' && finished === 'aura') {
-            // Bubble pop finished → back to normal idle/moving.
+            // Bubble pop finished → hold south idle so the exit reads clearly.
             c.mewPhase = 'normal';
             c.mewBubbleTimer = 0;
             c.mewSouthBurstCheck = 0;
+            c.roarHold = 0;
+            c.flourishFacing = undefined;
+            c.bearFacing = 'south';
             c.bearPose = 'idle';
-            c.roarTimer = rand(3, 5.5);
-            c.timer = Math.max(c.timer, rand(0.6, 1.2));
+            c.state = 'pause';
+            c.roarTimer = rand(4, 7);
+            c.timer = rand(2.2, 3.4);
             return;
           }
           if (c.sprite.id === 'mew' && finished === 'kick') {
