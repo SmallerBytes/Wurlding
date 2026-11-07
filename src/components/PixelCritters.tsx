@@ -78,6 +78,7 @@ import {
   MEW_ATLAS_REV,
   MEW_IDLE_WALK_DRAW_SCALE,
   MEW_POP_FRAME_TIME,
+  MEW_SINK_FRAME_TIME,
   MEW_TO_BUBBLE_FRAME_TIME,
   MEW_WALK_FRAME_TIME,
   preloadMew,
@@ -126,6 +127,7 @@ function flourishPeriod(c: Critter): number {
   if (c.sprite.id === 'ghostfreak' && c.bearPose === 'aura') return GHOSTFREAK_SINK_FRAME_TIME;
   if (c.sprite.id === 'mew' && c.bearPose === 'roar') return MEW_TO_BUBBLE_FRAME_TIME;
   if (c.sprite.id === 'mew' && c.bearPose === 'aura') return MEW_POP_FRAME_TIME;
+  if (c.sprite.id === 'mew' && c.bearPose === 'kick') return MEW_SINK_FRAME_TIME;
   return c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
 }
 
@@ -1143,7 +1145,12 @@ function syncBearPose(c: Critter, dt: number): void {
   if ((c.roarHold ?? 0) > 0) {
     // Flourish walkers are frame-driven (oneshot below) — don't kill on wall-clock.
     if (isFlourishWalker(c.sprite.id)) {
-      const pose = c.bearPose === 'aura' ? 'aura' : 'roar';
+      const pose =
+        c.sprite.id === 'mew' && c.bearPose === 'kick'
+          ? 'kick'
+          : c.bearPose === 'aura'
+            ? 'aura'
+            : 'roar';
       const locked =
         c.flourishFacing ??
         (c.sprite.id === 'ragnok' ? c.bearFacing ?? 'south' : 'south');
@@ -1313,14 +1320,13 @@ function syncBearPose(c: Critter, dt: number): void {
           c.bearPose = 'idle';
           return;
         }
-        // Mew: ONLY from south idle → mew_to_bubble → moving_bubble → south → pop → idle.
+        // Mew from south idle: bubble cycle OR sink cycle (even chance).
         if (c.sprite.id === 'mew') {
           if (c.mewPhase !== 'normal') {
             c.roarTimer = rand(2, 4);
             c.bearPose = 'idle';
             return;
           }
-          // Gate: must already be facing south in idle before mew_to_bubble.
           if ((c.bearFacing ?? 'south') !== 'south') {
             c.bearFacing = 'south';
             c.bearPose = 'idle';
@@ -1329,17 +1335,19 @@ function syncBearPose(c: Critter, dt: number): void {
             return;
           }
           c.bearPose = 'idle';
-          const frames = c.bearFrames?.get('roar:south');
+          const doSink = Math.random() < 0.5;
+          const pose: BearPose = doSink ? 'kick' : 'roar';
+          const frames = c.bearFrames?.get(`${pose}:south`);
           if (!frames || frames.length < 2) {
             c.roarTimer = rand(1.5, 3);
             return;
           }
-          c.mewPhase = 'to-bubble';
-          c.bearPose = 'roar';
+          if (!doSink) c.mewPhase = 'to-bubble';
+          c.bearPose = pose;
           c.bearFacing = 'south';
           c.flourishFacing = 'south';
-          c.roarHold = frames.length * MEW_TO_BUBBLE_FRAME_TIME + 0.5;
-          c.roarTimer = rand(5, 9);
+          c.roarHold = frames.length * flourishPeriod(c) + 0.5;
+          c.roarTimer = rand(4, 7);
           c.state = 'pause';
           c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 0.35);
           return;
@@ -1459,7 +1467,9 @@ function advanceFrame(c: Critter, dt: number): void {
       // Flourish with no atlas → abort so they don't sit invisible.
       if (
         isFlourishWalker(c.sprite.id) &&
-        (c.bearPose === 'roar' || c.bearPose === 'aura')
+        (c.bearPose === 'roar' ||
+          c.bearPose === 'aura' ||
+          (c.sprite.id === 'mew' && c.bearPose === 'kick'))
       ) {
         c.roarHold = 0;
         c.bearPose = 'idle';
@@ -1473,7 +1483,10 @@ function advanceFrame(c: Critter, dt: number): void {
     const period =
       c.sprite.id === 'void-walker' && c.bearPose === 'roar'
         ? VOID_ATTACK_FRAME_TIME
-        : isFlourishWalker(c.sprite.id) && (c.bearPose === 'roar' || c.bearPose === 'aura')
+        : isFlourishWalker(c.sprite.id) &&
+            (c.bearPose === 'roar' ||
+              c.bearPose === 'aura' ||
+              (c.sprite.id === 'mew' && c.bearPose === 'kick'))
           ? flourishPeriod(c)
           : c.sprite.id === 'mew' &&
               (c.mewPhase === 'bubble' || c.mewPhase === 'pre-pop') &&
@@ -1502,7 +1515,9 @@ function advanceFrame(c: Critter, dt: number): void {
     // Flourish walkers: play once through, then clear the hold (don't wrap mid-burst).
     if (
       isFlourishWalker(c.sprite.id) &&
-      (c.bearPose === 'roar' || c.bearPose === 'aura')
+      (c.bearPose === 'roar' ||
+        c.bearPose === 'aura' ||
+        (c.sprite.id === 'mew' && c.bearPose === 'kick'))
     ) {
       if (c.frame + 1 >= count) {
         const finished = c.bearPose;
@@ -1526,6 +1541,14 @@ function advanceFrame(c: Critter, dt: number): void {
           c.mewPhase = 'normal';
           c.mewBubbleTimer = 0;
           c.mewSouthBurstCheck = 0;
+          c.bearPose = 'idle';
+          c.roarTimer = rand(3, 5.5);
+          c.timer = Math.max(c.timer, rand(0.6, 1.2));
+          return;
+        }
+        if (c.sprite.id === 'mew' && finished === 'kick') {
+          // Sink finished → normal idle.
+          c.mewPhase = 'normal';
           c.bearPose = 'idle';
           c.roarTimer = rand(3, 5.5);
           c.timer = Math.max(c.timer, rand(0.6, 1.2));

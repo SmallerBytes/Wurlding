@@ -2,19 +2,16 @@
  * Mew — PNG frame-sequence atlas.
  * Frames live in /public/critters/mew/{idle|walk|to-bubble|bubble-walk|pop|sink}/…
  *
- * Sequence:
- *   1. South idle (required)
- *   2. mew_to_bubble
- *   3. moving_bubble (also the idle loop while bubbled)
- *   4. Face south, then bubble pop
- *   5. Normal idle again
+ * From south idle, either:
+ *   A) mew_to_bubble → moving_bubble → face south → bubble pop → idle
+ *   B) Sink_downward_while_pulling_knees_toward_the_chest → idle
  * mew_in_a_ball/rotations is unused. Idle/rotations are static facing refs only.
  */
 
 import { facingFromDelta, type BearFacing } from './alligatorBear';
 
 export type MewFacing = BearFacing;
-export type MewPose = 'idle' | 'walk' | 'roar' | 'aura';
+export type MewPose = 'idle' | 'walk' | 'roar' | 'aura' | 'kick';
 
 export const MEW_FACINGS: MewFacing[] = [
   'south',
@@ -39,15 +36,18 @@ export const MEW_WALK_FRAME_TIME = 0.09;
 export const MEW_TO_BUBBLE_FRAME_TIME = 0.08;
 /** Bubble-pop oneshot. */
 export const MEW_POP_FRAME_TIME = 0.08;
-export const MEW_ATLAS_REV = 4;
+/** Sink_downward_while_pulling_knees_toward_the_chest oneshot. */
+export const MEW_SINK_FRAME_TIME = 0.09;
+export const MEW_ATLAS_REV = 5;
 
 const IDLE_FRAME_COUNT = 8;
 const WALK_FRAME_COUNT = 13;
 const TO_BUBBLE_FRAME_COUNT = 41;
 const BUBBLE_WALK_FRAME_COUNT = 13;
 const POP_FRAME_COUNT = 25;
+const SINK_FRAME_COUNT = 41;
 
-type MewFolder = 'idle' | 'walk' | 'to-bubble' | 'bubble-walk' | 'pop';
+type MewFolder = 'idle' | 'walk' | 'to-bubble' | 'bubble-walk' | 'pop' | 'sink';
 
 function frameUrl(pose: MewFolder, facing: MewFacing, index: number): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -123,6 +123,9 @@ export async function loadMewFrames(
   if (pose === 'aura') {
     return loadFrameSequence('pop', 'south', POP_FRAME_COUNT);
   }
+  if (pose === 'kick') {
+    return loadFrameSequence('sink', 'south', SINK_FRAME_COUNT);
+  }
   if (opts?.bubble) {
     return loadFrameSequence('bubble-walk', facing, BUBBLE_WALK_FRAME_COUNT);
   }
@@ -148,5 +151,7 @@ export async function preloadMew(): Promise<Map<string, HTMLCanvasElement[]>> {
   if (toBubble.length) map.set('roar:south', toBubble);
   const pop = await loadMewFrames('aura', 'south');
   if (pop.length) map.set('aura:south', pop);
+  const sink = await loadMewFrames('kick', 'south');
+  if (sink.length) map.set('kick:south', sink);
   return map;
 }
