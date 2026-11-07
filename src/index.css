@@ -41,6 +41,21 @@ html[data-theme='light'] {
   --color-gold: #b45309;
 }
 
+/* Desktop companion overlay: must stay fully transparent or Windows paints a black screen. */
+html[data-companion-overlay='true'],
+html[data-companion-overlay='true'] body,
+html[data-companion-overlay='true'] #root {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html[data-companion-overlay='true'] body {
+  min-height: 0;
+  overflow: hidden;
+  color: transparent;
+}
+
 @layer base {
   * {
     scrollbar-width: thin;

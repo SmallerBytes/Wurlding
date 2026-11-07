@@ -1569,7 +1569,7 @@ export default function PixelCritters() {
   return (
     <canvas
       ref={canvasRef}
-      className="wz-critters pointer-events-none fixed inset-0 z-[5]"
+      className="wz-critters pointer-events-none fixed inset-0 z-[5] bg-transparent"
       aria-hidden
     />
   );

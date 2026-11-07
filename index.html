@@ -20,6 +20,9 @@
             m = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'off' : 'on';
           }
           document.documentElement.setAttribute('data-motion', m);
+          if (/companion-overlay/i.test(String(location.hash || ''))) {
+            document.documentElement.setAttribute('data-companion-overlay', 'true');
+          }
         } catch (e) {}
       })();
     </script>

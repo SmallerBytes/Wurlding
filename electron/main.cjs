@@ -177,15 +177,24 @@ function createCompanionOverlay() {
     maximizable: false,
     fullscreenable: false,
     thickFrame: false,
+    // Avoid Windows painting an opaque backdrop under the page.
+    paintWhenInitiallyHidden: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false,
+      // Needed so CSS transparent backgrounds composite correctly on Windows.
+      offscreen: false,
     },
   });
 
   companionOverlayWindow = win;
+  try {
+    win.setBackgroundColor('#00000000');
+  } catch {
+    // ignore
+  }
   try {
     win.setAlwaysOnTop(true, 'screen-saver');
   } catch {
@@ -196,7 +205,9 @@ function createCompanionOverlay() {
   } catch {
     // ignore
   }
-  win.setIgnoreMouseEvents(true, { forward: true });
+  // Full click-through (no forward). With forward:true, Electron hit-tests
+  // pixel alpha — an opaque body background ate all clicks and locked the desktop.
+  win.setIgnoreMouseEvents(true);
 
   const startUrl = process.env.ELECTRON_START_URL;
   if (startUrl) {
@@ -208,6 +219,26 @@ function createCompanionOverlay() {
   }
 
   win.webContents.on('did-finish-load', () => {
+    win.webContents
+      .insertCSS(
+        `html, body, #root { background: transparent !important; background-color: transparent !important; background-image: none !important; }
+         html { --color-void: transparent; }
+         body { min-height: 0 !important; overflow: hidden !important; }`,
+      )
+      .catch(() => {});
+    win.webContents
+      .executeJavaScript(
+        `document.documentElement.setAttribute('data-companion-overlay','true');
+         document.documentElement.style.backgroundColor='transparent';
+         document.body && (document.body.style.backgroundColor='transparent');`,
+      )
+      .catch(() => {});
+    try {
+      win.setIgnoreMouseEvents(true);
+      win.setBackgroundColor('#00000000');
+    } catch {
+      // ignore
+    }
     syncCompanionOverlayPrefs();
   });
 
@@ -831,6 +862,13 @@ ipcMain.handle('is-companion-overlay', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   return Boolean(win && win === companionOverlayWindow);
 });
+
+// Helps Chromium composite transparent BrowserWindows (avoids solid black overlay).
+try {
+  app.commandLine.appendSwitch('enable-transparent-visuals');
+} catch {
+  // ignore
+}
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.wurlding.app');
