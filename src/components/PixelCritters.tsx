@@ -232,6 +232,8 @@ interface Critter {
   mewPhase?: 'normal' | 'to-bubble' | 'bubble' | 'pre-pop' | 'pop';
   /** Mew: seconds left rolling in the bubble before facing south / popping. */
   mewBubbleTimer?: number;
+  /** Mew: cooldown between south-idle early-burst rolls while bubbled. */
+  mewSouthBurstCheck?: number;
 }
 
 interface Particle {
@@ -449,6 +451,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     cloakCooldown: sprite.id === 'ghostfreak' ? rand(7, 14) : undefined,
     mewPhase: sprite.id === 'mew' ? 'normal' : undefined,
     mewBubbleTimer: 0,
+    mewSouthBurstCheck: 0,
     state: sprite.kind === 'flyer' ? 'roam' : 'walk',
     timer: rand(1.5, 4),
     tx: 0,
@@ -1216,16 +1219,31 @@ function syncBearPose(c: Critter, dt: number): void {
   if (c.sprite.id === 'mew' && (c.roarHold ?? 0) <= 0) {
     if (c.mewPhase === 'bubble') {
       c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
-      if ((c.mewBubbleTimer ?? 0) <= 0) {
+      // South idle in the bubble: every ~1.5s, 50% chance to burst instead of waiting.
+      const southIdleBubble =
+        c.state === 'pause' && (c.bearFacing ?? 'south') === 'south';
+      let earlyBurst = false;
+      if (southIdleBubble) {
+        c.mewSouthBurstCheck = (c.mewSouthBurstCheck ?? 0) - dt;
+        if ((c.mewSouthBurstCheck ?? 0) <= 0) {
+          c.mewSouthBurstCheck = rand(1.2, 2);
+          earlyBurst = Math.random() < 0.5;
+        }
+      } else {
+        c.mewSouthBurstCheck = Math.min(c.mewSouthBurstCheck ?? 0.6, 0.6);
+      }
+      const timerDone = (c.mewBubbleTimer ?? 0) <= 0;
+      if (timerDone || earlyBurst) {
         // Must face south in the bubble before the pop clip.
         c.mewPhase = 'pre-pop';
         c.bearFacing = 'south';
         c.bearPose = 'idle';
         c.state = 'pause';
-        c.mewBubbleTimer = 0.55;
+        c.mewBubbleTimer = 0.45;
+        c.mewSouthBurstCheck = 0;
         c.frame = 0;
         c.frameClock = 0;
-        c.timer = Math.max(c.timer, 0.7);
+        c.timer = Math.max(c.timer, 0.6);
         return;
       }
     } else if (c.mewPhase === 'pre-pop') {
@@ -1495,20 +1513,22 @@ function advanceFrame(c: Critter, dt: number): void {
         if (c.sprite.id === 'mew' && finished === 'roar') {
           // mew_to_bubble finished → only then enter bubble + moving_bubble.
           c.mewPhase = 'bubble';
-          c.mewBubbleTimer = rand(3.5, 6.5);
+          c.mewBubbleTimer = rand(2.5, 5);
+          c.mewSouthBurstCheck = rand(0.8, 1.4);
           c.bearPose = 'walk';
           c.state = 'walk';
-          c.timer = rand(1.5, 3);
-          c.roarTimer = rand(6, 10);
+          c.timer = rand(1.2, 2.5);
+          c.roarTimer = rand(4, 7);
           return;
         }
         if (c.sprite.id === 'mew' && finished === 'aura') {
           // Bubble pop finished → back to normal idle/moving.
           c.mewPhase = 'normal';
           c.mewBubbleTimer = 0;
+          c.mewSouthBurstCheck = 0;
           c.bearPose = 'idle';
-          c.roarTimer = rand(4, 7);
-          c.timer = Math.max(c.timer, rand(0.8, 1.6));
+          c.roarTimer = rand(3, 5.5);
+          c.timer = Math.max(c.timer, rand(0.6, 1.2));
           return;
         }
         c.bearPose = 'idle';

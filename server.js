@@ -67,7 +67,7 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
   }
 }
 
-const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 function readPreferences() {
   if (!fs.existsSync(PREFS_FILE)) return null;

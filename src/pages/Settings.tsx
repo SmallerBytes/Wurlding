@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Settings as SettingsIcon, Moon, Sun, Sparkles, BookOpen, Ghost } from 'lucide-react';
+import { Settings as SettingsIcon, Moon, Sun, Sparkles, BookOpen, Ghost, ChevronDown } from 'lucide-react';
 import { WHATS_NEW } from '../data/whatsNew';
 import { CRITTERS, visibleCritterGenres, isCritterGenre } from '../data/pixelCritters';
 import PixelSpritePreview from '../components/PixelSpritePreview';
@@ -388,37 +388,56 @@ export default function Settings() {
           </div>
         </section>
 
-        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="updates-heading">
-          <div>
-            <h2 id="updates-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
-              <BookOpen className="h-5 w-5 text-arcane" aria-hidden />
-              Updates
-            </h2>
-            <p className="text-sm text-mist">
-              A log of what changed in each version. It stays here in Settings.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {WHATS_NEW.map((entry) => (
-              <article key={entry.version} className="rounded-lg border border-dusk/60 bg-abyss/40 p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-[Cinzel] text-lg font-semibold text-moonlight">{entry.title}</h3>
-                  <span className="text-xs tabular-nums text-mist">v{entry.version}</span>
-                </div>
-                <p className="mt-1 text-xs text-mist">
-                  <time dateTime={entry.date} className="tabular-nums">
-                    {formatEntryDate(entry.date)}
-                  </time>
+        <section className="card border-dusk/80 bg-shadow/40" aria-labelledby="updates-heading">
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg outline-none marker:content-none [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <h2 id="updates-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
+                  <BookOpen className="h-5 w-5 shrink-0 text-arcane" aria-hidden />
+                  Updates
+                </h2>
+                <p className="text-sm text-mist">
+                  Latest: v{WHATS_NEW[0]?.version} — {WHATS_NEW[0]?.title}. Open for the full log.
                 </p>
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-silver">
-                  {entry.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
+              </div>
+              <ChevronDown
+                className="h-5 w-5 shrink-0 text-mist transition-transform group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+
+            <div className="mt-4 space-y-3 border-t border-dusk/60 pt-4">
+              {WHATS_NEW.map((entry) => (
+                <details
+                  key={entry.version}
+                  className="group/entry rounded-lg border border-dusk/60 bg-abyss/40 open:bg-abyss/60"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 font-[Cinzel] font-semibold text-moonlight">
+                      {entry.title}
+                      <span className="ml-2 text-xs font-normal tabular-nums text-mist">v{entry.version}</span>
+                    </span>
+                    <ChevronDown
+                      className="h-4 w-4 shrink-0 text-mist transition-transform group-open/entry:rotate-180"
+                      aria-hidden
+                    />
+                  </summary>
+                  <div className="border-t border-dusk/50 px-4 pb-3 pt-2">
+                    <p className="text-xs text-mist">
+                      <time dateTime={entry.date} className="tabular-nums">
+                        {formatEntryDate(entry.date)}
+                      </time>
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-silver">
+                      {entry.bullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
+              ))}
+            </div>
+          </details>
         </section>
       </div>
     </div>
