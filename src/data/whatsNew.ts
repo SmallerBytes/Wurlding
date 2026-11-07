@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.29',
+    date: '2026-11-07',
+    title: 'Ghostfreak scale polish and Goblin free-roam fix',
+    bullets: [
+      'Ghostfreak draw scales tuned for walk, idle, and void/sink (with a lighter SE/SW walk).',
+      'Ghostfreak never uses rotations stills — only walk, idle, void, and sink.',
+      'Goblin Warrior Priest no longer freezes after a short free-roam; longer idle pauses so flourishes can play.',
+    ],
+  },
+  {
     version: '0.1.28',
     date: '2026-11-07',
     title: 'Multi companions, desktop roam, and wallpapers',

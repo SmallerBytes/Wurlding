@@ -71,8 +71,12 @@ import {
 } from '../data/ironGiant';
 import {
   GHOSTFREAK_ATLAS_REV,
+  GHOSTFREAK_FLOURISH_DRAW_SCALE,
+  GHOSTFREAK_IDLE_DRAW_SCALE,
   GHOSTFREAK_SINK_FRAME_TIME,
   GHOSTFREAK_VOID_FRAME_TIME,
+  GHOSTFREAK_WALK_DRAW_SCALE,
+  GHOSTFREAK_WALK_SE_SW_DRAW_SCALE,
   preloadGhostfreak,
 } from '../data/ghostfreak';
 import {
@@ -444,7 +448,17 @@ function updateFloorWander(c: Critter, dt: number): void {
       clampToViewport(c);
       if (remaining < 10 || c.timer <= 0) {
         c.state = 'pause';
-        c.timer = rand(0.45, 1.6);
+        // Goblin / Sultan need a real idle beat so fight-idle + flourishes can play.
+        c.timer =
+          c.sprite.id === 'goblin-priest' || c.sprite.id === 'alligator-bear'
+            ? rand(1.8, 3.4)
+            : rand(0.45, 1.6);
+        if (c.sprite.id === 'goblin-priest') {
+          c.bearFacing = fightIdleFacing(c.bearFacing ?? 'south');
+          c.bearPose = 'idle';
+          c.frame = 0;
+          c.frameClock = 0;
+        }
       }
       break;
     }
@@ -1509,11 +1523,20 @@ function advanceFrame(c: Critter, dt: number): void {
         (prevPose === 'launch' && c.bearPose === 'launch') ||
         (prevPose === 'kiss' && c.bearPose === 'kiss') ||
         (prevPose === 'aura' && c.bearPose === 'aura') ||
-        (prevPose === 'kick' && c.bearPose === 'kick' && c.sprite.id === 'mew') ||
+        (prevPose === 'kick' && c.bearPose === 'kick') ||
+        (prevPose === 'mask' && c.bearPose === 'mask') ||
         (prevPose === 'roar' && c.bearPose === 'roar' && isFlourishWalker(c.sprite.id));
       if (!sticky) {
-        c.frame = 0;
-        c.frameClock = 0;
+        // Facing chatter during free-roam used to zero the walk/idle clock every
+        // tick (Goblin looked frozen after a short run). Keep the stride going.
+        const keepStride =
+          prevPose === c.bearPose &&
+          (c.bearPose === 'walk' || c.bearPose === 'idle') &&
+          c.sprite.imageAtlas;
+        if (!keepStride) {
+          c.frame = 0;
+          c.frameClock = 0;
+        }
       }
     }
     // Wake GIF once → back to normal roaming (wait for frames if still loading).
@@ -1756,6 +1779,26 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
         const dx = x + Math.floor((c.w - dw) / 2);
         const dy = y + (c.h - dh);
         ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'ghostfreak') {
+        const scale =
+          c.bearPose === 'walk'
+            ? c.bearFacing === 'south-east' || c.bearFacing === 'south-west'
+              ? GHOSTFREAK_WALK_SE_SW_DRAW_SCALE
+              : GHOSTFREAK_WALK_DRAW_SCALE
+            : c.bearPose === 'idle'
+              ? GHOSTFREAK_IDLE_DRAW_SCALE
+              : c.bearPose === 'roar' || c.bearPose === 'aura'
+                ? GHOSTFREAK_FLOURISH_DRAW_SCALE
+                : 1;
+        if (scale !== 1) {
+          const dw = Math.max(1, Math.round(c.w * scale));
+          const dh = Math.max(1, Math.round(c.h * scale));
+          const dx = x + Math.floor((c.w - dw) / 2);
+          const dy = y + (c.h - dh);
+          ctx.drawImage(img, dx, dy, dw, dh);
+        } else {
+          ctx.drawImage(img, x, y, c.w, c.h);
+        }
       } else if (
         c.sprite.id === 'mew' &&
         (c.mewPhase === 'normal' || !c.mewPhase) &&

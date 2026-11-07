@@ -29,7 +29,7 @@ export { facingFromDelta };
 export const GOBLIN_PRIEST_SIZE = 64;
 export const GOBLIN_PRIEST_SCALE = 2;
 export const GOBLIN_PRIEST_FRAME_TIME = 0.12;
-export const GOBLIN_PRIEST_ATLAS_REV = 1;
+export const GOBLIN_PRIEST_ATLAS_REV = 2;
 export const GOBLIN_MASK_FRAME_TIME = 0.1;
 
 const WALK_FRAME_COUNT = 8;
@@ -59,21 +59,41 @@ const animCache = new Map<string, HTMLCanvasElement[]>();
 
 async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
   if (typeof document === 'undefined') return null;
-  const img = new Image();
-  img.src = url;
+  const toCanvas = async (img: HTMLImageElement) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || GOBLIN_PRIEST_SIZE;
+    canvas.height = img.naturalHeight || GOBLIN_PRIEST_SIZE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, 0, 0);
+    return canvas;
+  };
   try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      try {
+        const img = new Image();
+        img.src = objUrl;
+        await img.decode();
+        return await toCanvas(img);
+      } finally {
+        URL.revokeObjectURL(objUrl);
+      }
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const img = new Image();
+    img.src = url;
     await img.decode();
+    return await toCanvas(img);
   } catch {
     return null;
   }
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || GOBLIN_PRIEST_SIZE;
-  canvas.height = img.naturalHeight || GOBLIN_PRIEST_SIZE;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, 0, 0);
-  return canvas;
 }
 
 async function loadFrameSequence(
@@ -85,11 +105,28 @@ async function loadFrameSequence(
   const cached = animCache.get(key);
   if (cached) return cached;
 
-  const frames = (
-    await Promise.all(Array.from({ length: count }, (_, i) => loadPng(frameUrl(pose, facing, i))))
-  ).filter((f): f is HTMLCanvasElement => f !== null);
+  const loaded = await Promise.all(
+    Array.from({ length: count }, async (_, i) => {
+      const url = frameUrl(pose, facing, i);
+      let canvas = await loadPng(url);
+      if (!canvas) canvas = await loadPng(url);
+      return canvas;
+    }),
+  );
+  let fallback: HTMLCanvasElement | null = null;
+  for (const canvas of loaded) {
+    if (canvas) {
+      fallback = canvas;
+      break;
+    }
+  }
+  if (!fallback) return [];
 
-  if (frames.length) animCache.set(key, frames);
+  const frames: HTMLCanvasElement[] = new Array(count);
+  for (let i = 0; i < count; i++) {
+    frames[i] = loaded[i] ?? (i > 0 ? frames[i - 1] : null) ?? fallback;
+  }
+  animCache.set(key, frames);
   return frames;
 }
 

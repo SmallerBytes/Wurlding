@@ -3,6 +3,8 @@
  * Frames live in /public/critters/ghostfreak/{walk|idle|void|sink}/…
  *
  * Drift loops in 8 directions; pause opens a stomach-void or sinks beneath the floor.
+ * Ghostfreak/Idle/rotations (and any public …/rotations folder) is NEVER used —
+ * only Idle_Moving → walk/idle, void → roar, sink → aura.
  */
 
 import { facingFromDelta, type BearFacing } from './alligatorBear';
@@ -30,19 +32,25 @@ export const GHOSTFREAK_FRAME_TIME = 0.1;
 export const GHOSTFREAK_VOID_FRAME_TIME = 0.09;
 /** Sink-beneath-floor flourish. */
 export const GHOSTFREAK_SINK_FRAME_TIME = 0.09;
-export const GHOSTFREAK_ATLAS_REV = 3;
+/** Drift walk a bit larger; idle / void / sink larger still. */
+export const GHOSTFREAK_WALK_DRAW_SCALE = 1.28;
+/** SE/SW walk frames read a hair larger — nudge them down. */
+export const GHOSTFREAK_WALK_SE_SW_DRAW_SCALE = 1.22;
+export const GHOSTFREAK_IDLE_DRAW_SCALE = 1.34;
+export const GHOSTFREAK_FLOURISH_DRAW_SCALE = 1.42;
+export const GHOSTFREAK_ATLAS_REV = 5;
 
 const MOVE_FRAME_COUNT = 9;
 const VOID_FRAME_COUNT = 41;
 const SINK_FRAME_COUNT = 41;
 
-function frameUrl(
-  pose: 'walk' | 'idle' | 'void' | 'sink',
-  facing: GhostfreakFacing,
-  index: number,
-): string {
+/** Animation folders only — never `rotations`. */
+type GhostfreakFolder = 'walk' | 'idle' | 'void' | 'sink';
+
+function frameUrl(pose: GhostfreakFolder, facing: GhostfreakFacing, index: number): string {
   const base = import.meta.env.BASE_URL || '/';
   const n = String(index).padStart(3, '0');
+  // Hard path: only walk|idle|void|sink. Rotations stills must never appear here.
   return `${base}critters/ghostfreak/${pose}/${facing}/frame_${n}.png`;
 }
 
@@ -68,10 +76,13 @@ async function loadPng(url: string): Promise<HTMLCanvasElement | null> {
 }
 
 async function loadFrameSequence(
-  pose: 'walk' | 'idle' | 'void' | 'sink',
+  pose: GhostfreakFolder,
   facing: GhostfreakFacing,
   count: number,
 ): Promise<HTMLCanvasElement[]> {
+  if (pose !== 'walk' && pose !== 'idle' && pose !== 'void' && pose !== 'sink') {
+    return [];
+  }
   const key = `gf${GHOSTFREAK_ATLAS_REV}:${pose}:${facing}`;
   const cached = animCache.get(key);
   if (cached) return cached;
@@ -79,6 +90,7 @@ async function loadFrameSequence(
   const loaded = await Promise.all(
     Array.from({ length: count }, async (_, i) => {
       const url = frameUrl(pose, facing, i);
+      if (url.includes('/rotations/')) return null;
       let canvas = await loadPng(url);
       if (!canvas) canvas = await loadPng(url);
       return canvas;
