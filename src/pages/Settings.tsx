@@ -406,7 +406,7 @@ export default function Settings() {
               />
             </summary>
 
-            <div className="mt-4 space-y-3 border-t border-dusk/60 pt-4">
+            <div className="mt-4 max-h-[min(360px,45vh)] space-y-3 overflow-y-auto border-t border-dusk/60 pt-4 pr-1">
               {WHATS_NEW.map((entry) => (
                 <details
                   key={entry.version}

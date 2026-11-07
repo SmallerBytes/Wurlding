@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.25',
+    date: '2026-11-07',
+    title: 'Update notes scrollbar and companion fixes',
+    bullets: [
+      'Settings → Updates log scrolls inside a fixed-height panel so it no longer stretches the page.',
+      'Mew to-bubble morph plays through its frames instead of freezing, then jumping into the bubble.',
+      'Mew flourish lock and aspect-correct drawing so enter-bubble / sink / pop stay readable.',
+    ],
+  },
+  {
     version: '0.1.24',
     date: '2026-11-07',
     title: 'Companion changes',

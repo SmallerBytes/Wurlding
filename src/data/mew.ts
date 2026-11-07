@@ -32,13 +32,13 @@ export const MEW_SCALE = 2;
 export const MEW_IDLE_WALK_DRAW_SCALE = 0.82;
 export const MEW_FRAME_TIME = 0.1;
 export const MEW_WALK_FRAME_TIME = 0.09;
-/** Enter-bubble oneshot. */
-export const MEW_TO_BUBBLE_FRAME_TIME = 0.08;
+/** Enter-bubble oneshot — slow enough to read the morph. */
+export const MEW_TO_BUBBLE_FRAME_TIME = 0.12;
 /** Bubble-pop oneshot. */
-export const MEW_POP_FRAME_TIME = 0.08;
+export const MEW_POP_FRAME_TIME = 0.09;
 /** Sink_downward_while_pulling_knees_toward_the_chest oneshot. */
 export const MEW_SINK_FRAME_TIME = 0.09;
-export const MEW_ATLAS_REV = 5;
+export const MEW_ATLAS_REV = 6;
 
 const IDLE_FRAME_COUNT = 8;
 const WALK_FRAME_COUNT = 13;
