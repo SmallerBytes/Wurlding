@@ -10,6 +10,7 @@ import { loadGolemFrames } from '../data/golem';
 import { loadVictfurFrames } from '../data/victfur';
 import { loadIronGiantFrames } from '../data/ironGiant';
 import { loadGhostfreakFrames } from '../data/ghostfreak';
+import { loadMewFrames } from '../data/mew';
 import { loadVoidFrames } from '../data/voidWalker';
 import { renderSpriteFrame, spriteSize, type CritterSprite } from '../data/pixelCritters';
 
@@ -107,7 +108,9 @@ export default function PixelSpritePreview({
                               ? await loadIronGiantFrames('idle', 'south')
                               : sprite.id === 'ghostfreak'
                                 ? await loadGhostfreakFrames('idle', 'south')
-                                : await loadBearFrames('idle', 'south');
+                                : sprite.id === 'mew'
+                                  ? await loadMewFrames('idle', 'south')
+                                  : await loadBearFrames('idle', 'south');
         if (cancelled || !frames.length) return;
         let index = 0;
         drawImageFrame(frames[0]!);

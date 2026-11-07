@@ -29,7 +29,8 @@ export type CritterId =
   | 'golem'
   | 'victfur'
   | 'iron-giant'
-  | 'ghostfreak';
+  | 'ghostfreak'
+  | 'mew';
 
 export type CritterGenre =
   | 'off'
@@ -41,6 +42,7 @@ export type CritterGenre =
   | 'victfur'
   | 'iron-giant'
   | 'ghostfreak'
+  | 'mew'
   | 'wilds'
   | 'alligator-bear'
   | 'crabacus'
@@ -57,6 +59,7 @@ export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'victfur',
   'iron-giant',
   'ghostfreak',
+  'mew',
   'wilds',
   'alligator-bear',
   'crabacus',
@@ -735,6 +738,21 @@ const GHOSTFREAK: CritterSprite = {
   frames: [['.']],
 };
 
+/** Mew — walk, curl into a bubble, roll, then pop back to idle. */
+const MEW: CritterSprite = {
+  id: 'mew',
+  name: 'Mew',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.1,
+  speed: 38,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 60,
+  palette: {},
+  frames: [['.']],
+};
+
 export const CRITTERS: Record<CritterId, CritterSprite> = {
   fairy: FAIRY,
   pixie: PIXIE,
@@ -757,6 +775,7 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   victfur: VICTFUR,
   'iron-giant': IRON_GIANT,
   ghostfreak: GHOSTFREAK,
+  mew: MEW,
 };
 
 export interface CritterGenreInfo {
@@ -831,6 +850,13 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
     label: 'Ghostfreak',
     description: 'A one-eyed phantom who drifts, opens a dark void, or sinks through the floor.',
     cast: ['ghostfreak'],
+    count: 1,
+  },
+  {
+    id: 'mew',
+    label: 'Mew',
+    description: 'A pink psychic cat who curls into a bubble, rolls around, then pops free.',
+    cast: ['mew'],
     count: 1,
   },
   {

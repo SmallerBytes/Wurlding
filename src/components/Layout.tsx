@@ -33,6 +33,9 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCompanions, setDesktopCompanionsState] = useState(() => getStoredDesktopCompanions());
+  /** Desktop overlay only exists in Electron; never hide in-app pets in the browser. */
+  const electronDesktop =
+    typeof window !== 'undefined' && Boolean(window.wurldingDesktop?.setDesktopCompanions);
   const { worlds, activeWorldId, setActiveWorld } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,8 +55,8 @@ export default function Layout() {
   return (
     <div className="relative flex h-screen overflow-hidden">
       <AmbientMotes />
-      {/* When desktop overlay is on, companions live there instead of duplicating in-app. */}
-      {!desktopCompanions && <PixelCritters />}
+      {/* Hide in-app pets only when the real Electron desktop overlay is active. */}
+      {!(desktopCompanions && electronDesktop) && <PixelCritters />}
       <SecretCritterUnlock />
 
       {mobileOpen && (

@@ -75,6 +75,14 @@ import {
   preloadGhostfreak,
 } from '../data/ghostfreak';
 import {
+  MEW_ATLAS_REV,
+  MEW_IDLE_WALK_DRAW_SCALE,
+  MEW_POP_FRAME_TIME,
+  MEW_TO_BUBBLE_FRAME_TIME,
+  MEW_WALK_FRAME_TIME,
+  preloadMew,
+} from '../data/mew';
+import {
   VOID_ATTACK_DRAW_SCALE,
   VOID_ATTACK_FRAME_TIME,
   VOID_WALKER_ATLAS_REV,
@@ -90,7 +98,7 @@ import {
 } from '../data/pixelCritters';
 
 /** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
-const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}:${GHOSTFREAK_ATLAS_REV}`;
+const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}:${GHOSTFREAK_ATLAS_REV}:${MEW_ATLAS_REV}`;
 
 /** Floor-wander atlas companions with frame-driven oneshot flourishes. */
 function isFlourishWalker(id: CritterId): boolean {
@@ -100,7 +108,8 @@ function isFlourishWalker(id: CritterId): boolean {
     id === 'golem' ||
     id === 'victfur' ||
     id === 'iron-giant' ||
-    id === 'ghostfreak'
+    id === 'ghostfreak' ||
+    id === 'mew'
   );
 }
 
@@ -115,6 +124,8 @@ function flourishPeriod(c: Critter): number {
   if (c.sprite.id === 'iron-giant' && c.bearPose === 'roar') return IRON_GIANT_FLASH_FRAME_TIME;
   if (c.sprite.id === 'ghostfreak' && c.bearPose === 'roar') return GHOSTFREAK_VOID_FRAME_TIME;
   if (c.sprite.id === 'ghostfreak' && c.bearPose === 'aura') return GHOSTFREAK_SINK_FRAME_TIME;
+  if (c.sprite.id === 'mew' && c.bearPose === 'roar') return MEW_TO_BUBBLE_FRAME_TIME;
+  if (c.sprite.id === 'mew' && c.bearPose === 'aura') return MEW_POP_FRAME_TIME;
   return c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
 }
 
@@ -214,6 +225,13 @@ interface Critter {
   cloakTimer?: number;
   /** Seconds until the next cloak attempt. */
   cloakCooldown?: number;
+  /**
+   * Mew bubble sequence (never uses mew_in_a_ball/rotations):
+   * south idle → mew_to_bubble → moving_bubble (walk+idle) → face south → pop → idle.
+   */
+  mewPhase?: 'normal' | 'to-bubble' | 'bubble' | 'pre-pop' | 'pop';
+  /** Mew: seconds left rolling in the bubble before facing south / popping. */
+  mewBubbleTimer?: number;
 }
 
 interface Particle {
@@ -406,12 +424,14 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     bearFacing: Math.random() < 0.5 ? 'east' : 'west',
     bearPose: 'idle',
     roarTimer:
-      sprite.atlasExtras ||
-      sprite.id === 'void-walker' ||
-      sprite.id === 'goblin-priest' ||
-      isFlourishWalker(sprite.id)
-        ? rand(5, 12)
-        : undefined,
+      sprite.id === 'mew'
+        ? rand(3, 6)
+        : sprite.atlasExtras ||
+            sprite.id === 'void-walker' ||
+            sprite.id === 'goblin-priest' ||
+            isFlourishWalker(sprite.id)
+          ? rand(5, 12)
+          : undefined,
     roarHold: 0,
     flourishWindup: 0,
     faePrevFacing: undefined,
@@ -427,6 +447,8 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     cloakAlpha: 1,
     cloakTimer: 0,
     cloakCooldown: sprite.id === 'ghostfreak' ? rand(7, 14) : undefined,
+    mewPhase: sprite.id === 'mew' ? 'normal' : undefined,
+    mewBubbleTimer: 0,
     state: sprite.kind === 'flyer' ? 'roam' : 'walk',
     timer: rand(1.5, 4),
     tx: 0,
@@ -990,6 +1012,18 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
       c.bearFrames.get(`walk:${facing}`)
     );
   }
+  // Bubble / pre-pop: moving_bubble is both walk and idle (no ball-rotation folder).
+  if (
+    c.sprite.id === 'mew' &&
+    (c.mewPhase === 'bubble' || c.mewPhase === 'pre-pop') &&
+    (pose === 'walk' || pose === 'idle')
+  ) {
+    const face = c.mewPhase === 'pre-pop' ? 'south' : facing;
+    return (
+      c.bearFrames.get(`bubble-walk:${face}`) ??
+      c.bearFrames.get('bubble-walk:south')
+    );
+  }
   return (
     c.bearFrames.get(`${pose}:${facing}`) ??
     c.bearFrames.get(`idle:${facing}`) ??
@@ -1116,6 +1150,7 @@ function syncBearPose(c: Critter, dt: number): void {
         c.roarHold = 0;
         c.bearPose = 'idle';
         c.flourishFacing = undefined;
+        if (c.sprite.id === 'mew') c.mewPhase = 'normal';
         c.roarTimer = rand(4, 8);
         c.frame = 0;
         c.frameClock = 0;
@@ -1176,6 +1211,49 @@ function syncBearPose(c: Critter, dt: number): void {
     c.bearPose = c.sprite.hops ? 'jump' : 'walk';
     return;
   }
+
+  // Mew bubble → face south (pre-pop) → pop. Runs during walk or pause.
+  if (c.sprite.id === 'mew' && (c.roarHold ?? 0) <= 0) {
+    if (c.mewPhase === 'bubble') {
+      c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
+      if ((c.mewBubbleTimer ?? 0) <= 0) {
+        // Must face south in the bubble before the pop clip.
+        c.mewPhase = 'pre-pop';
+        c.bearFacing = 'south';
+        c.bearPose = 'idle';
+        c.state = 'pause';
+        c.mewBubbleTimer = 0.55;
+        c.frame = 0;
+        c.frameClock = 0;
+        c.timer = Math.max(c.timer, 0.7);
+        return;
+      }
+    } else if (c.mewPhase === 'pre-pop') {
+      c.bearFacing = 'south';
+      c.bearPose = 'idle';
+      c.mewBubbleTimer = (c.mewBubbleTimer ?? 0) - dt;
+      if ((c.mewBubbleTimer ?? 0) <= 0) {
+        const frames = c.bearFrames?.get('aura:south');
+        if (frames && frames.length >= 2) {
+          c.mewPhase = 'pop';
+          c.bearPose = 'aura';
+          c.bearFacing = 'south';
+          c.flourishFacing = 'south';
+          c.roarHold = frames.length * MEW_POP_FRAME_TIME + 0.35;
+          c.state = 'pause';
+          c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 0.3);
+          c.frame = 0;
+          c.frameClock = 0;
+          return;
+        }
+        c.mewPhase = 'normal';
+        c.mewBubbleTimer = 0;
+      } else {
+        return;
+      }
+    }
+  }
+
   if (c.state === 'walk' || c.state === 'approach') {
     c.bearPose = 'walk';
     if (c.roarTimer != null) c.roarTimer = (c.roarTimer ?? 8) - dt;
@@ -1192,6 +1270,7 @@ function syncBearPose(c: Critter, dt: number): void {
     }
     return;
   }
+
   // Occasional roar / sword-draw / goblin flourish while idling.
   if (c.state === 'pause' && c.roarTimer != null) {
     c.roarTimer = (c.roarTimer ?? 8) - dt;
@@ -1214,6 +1293,37 @@ function syncBearPose(c: Critter, dt: number): void {
         if (c.sprite.id === 'ghostfreak' && c.cloakPhase) {
           c.roarTimer = rand(1.2, 2.5);
           c.bearPose = 'idle';
+          return;
+        }
+        // Mew: ONLY from south idle → mew_to_bubble → moving_bubble → south → pop → idle.
+        if (c.sprite.id === 'mew') {
+          if (c.mewPhase !== 'normal') {
+            c.roarTimer = rand(2, 4);
+            c.bearPose = 'idle';
+            return;
+          }
+          // Gate: must already be facing south in idle before mew_to_bubble.
+          if ((c.bearFacing ?? 'south') !== 'south') {
+            c.bearFacing = 'south';
+            c.bearPose = 'idle';
+            c.roarTimer = rand(0.9, 1.8);
+            c.timer = Math.max(c.timer, 1.2);
+            return;
+          }
+          c.bearPose = 'idle';
+          const frames = c.bearFrames?.get('roar:south');
+          if (!frames || frames.length < 2) {
+            c.roarTimer = rand(1.5, 3);
+            return;
+          }
+          c.mewPhase = 'to-bubble';
+          c.bearPose = 'roar';
+          c.bearFacing = 'south';
+          c.flourishFacing = 'south';
+          c.roarHold = frames.length * MEW_TO_BUBBLE_FRAME_TIME + 0.5;
+          c.roarTimer = rand(5, 9);
+          c.state = 'pause';
+          c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 0.35);
           return;
         }
         // Ragnok keeps current facing for 8-dir flame; others face south for clips.
@@ -1336,6 +1446,7 @@ function advanceFrame(c: Critter, dt: number): void {
         c.roarHold = 0;
         c.bearPose = 'idle';
         c.flourishFacing = undefined;
+        if (c.sprite.id === 'mew') c.mewPhase = 'normal';
         c.roarTimer = rand(4, 8);
       }
       c.frame = 0;
@@ -1346,6 +1457,10 @@ function advanceFrame(c: Critter, dt: number): void {
         ? VOID_ATTACK_FRAME_TIME
         : isFlourishWalker(c.sprite.id) && (c.bearPose === 'roar' || c.bearPose === 'aura')
           ? flourishPeriod(c)
+          : c.sprite.id === 'mew' &&
+              (c.mewPhase === 'bubble' || c.mewPhase === 'pre-pop') &&
+              (c.bearPose === 'walk' || c.bearPose === 'idle')
+            ? MEW_WALK_FRAME_TIME
           : c.sprite.id === 'goblin-priest' && c.bearPose === 'mask'
             ? GOBLIN_MASK_FRAME_TIME
             : c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
@@ -1372,13 +1487,33 @@ function advanceFrame(c: Critter, dt: number): void {
       (c.bearPose === 'roar' || c.bearPose === 'aura')
     ) {
       if (c.frame + 1 >= count) {
+        const finished = c.bearPose;
         c.roarHold = 0;
-        c.bearPose = 'idle';
         c.flourishFacing = undefined;
-        c.roarTimer = rand(8, 14);
-        c.timer = Math.max(c.timer, rand(1.2, 2.4));
         c.frame = 0;
         c.frameClock = 0;
+        if (c.sprite.id === 'mew' && finished === 'roar') {
+          // mew_to_bubble finished → only then enter bubble + moving_bubble.
+          c.mewPhase = 'bubble';
+          c.mewBubbleTimer = rand(3.5, 6.5);
+          c.bearPose = 'walk';
+          c.state = 'walk';
+          c.timer = rand(1.5, 3);
+          c.roarTimer = rand(6, 10);
+          return;
+        }
+        if (c.sprite.id === 'mew' && finished === 'aura') {
+          // Bubble pop finished → back to normal idle/moving.
+          c.mewPhase = 'normal';
+          c.mewBubbleTimer = 0;
+          c.bearPose = 'idle';
+          c.roarTimer = rand(4, 7);
+          c.timer = Math.max(c.timer, rand(0.8, 1.6));
+          return;
+        }
+        c.bearPose = 'idle';
+        c.roarTimer = rand(8, 14);
+        c.timer = Math.max(c.timer, rand(1.2, 2.4));
         return;
       }
       c.frame += 1;
@@ -1479,6 +1614,16 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
       } else if (c.sprite.id === 'victfur' && c.bearPose === 'aura') {
         const dw = Math.max(1, Math.round(c.w * VICTFUR_HAT_DRAW_SCALE));
         const dh = Math.max(1, Math.round(c.h * VICTFUR_HAT_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (
+        c.sprite.id === 'mew' &&
+        (c.mewPhase === 'normal' || !c.mewPhase) &&
+        (c.bearPose === 'idle' || c.bearPose === 'walk')
+      ) {
+        const dw = Math.max(1, Math.round(c.w * MEW_IDLE_WALK_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * MEW_IDLE_WALK_DRAW_SCALE));
         const dx = x + Math.floor((c.w - dw) / 2);
         const dy = y + (c.h - dh);
         ctx.drawImage(img, dx, dy, dw, dh);
@@ -1631,6 +1776,7 @@ export default function PixelCritters() {
           else if (id === 'victfur') atlasById.set(id, await preloadVictfur());
           else if (id === 'iron-giant') atlasById.set(id, await preloadIronGiant());
           else if (id === 'ghostfreak') atlasById.set(id, await preloadGhostfreak());
+          else if (id === 'mew') atlasById.set(id, await preloadMew());
         }),
       );
       if (disposed) return;

@@ -36,7 +36,7 @@ let currentCritters = 'fae-princess';
 /** Companions roam a desktop overlay even when the main window is minimized. */
 let currentDesktopCompanions = false;
 
-const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 
 const revealedWindows = new WeakSet();
 
