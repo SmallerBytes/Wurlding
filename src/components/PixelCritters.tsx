@@ -206,6 +206,14 @@ interface Critter {
   sleepCooldown?: number;
   /** Lie-down → hold still → wake GIF. */
   sleepPhase?: 'lie-down' | 'hold' | 'wake';
+  /** Ghostfreak: fade out → stay gone → fade back in. */
+  cloakPhase?: 'out' | 'hidden' | 'in';
+  /** Ghostfreak draw opacity (0 invisible … 1 solid). */
+  cloakAlpha?: number;
+  /** Seconds left in the current cloak phase. */
+  cloakTimer?: number;
+  /** Seconds until the next cloak attempt. */
+  cloakCooldown?: number;
 }
 
 interface Particle {
@@ -415,6 +423,10 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     sleepPhase: undefined,
     // Sleep cycle is Alligator Bear only.
     sleepCooldown: sprite.id === 'alligator-bear' ? rand(6, 12) : undefined,
+    cloakPhase: undefined,
+    cloakAlpha: 1,
+    cloakTimer: 0,
+    cloakCooldown: sprite.id === 'ghostfreak' ? rand(7, 14) : undefined,
     state: sprite.kind === 'flyer' ? 'roam' : 'walk',
     timer: rand(1.5, 4),
     tx: 0,
@@ -488,6 +500,67 @@ function startHop(c: Critter, to: Perch): void {
   c.facing = dx >= 0 ? 1 : -1;
   if (c.sprite.imageAtlas) c.bearFacing = facingFromDelta(dx, dy);
   c.state = 'hop';
+}
+
+const GHOSTFREAK_CLOAK_FADE = 0.75;
+
+/** Ghostfreak drifts invisible for a beat, then fades back in. */
+function updateGhostfreakCloak(c: Critter, dt: number): void {
+  if (c.sprite.id !== 'ghostfreak') return;
+
+  const busyFlourish = (c.roarHold ?? 0) > 0 || (c.flourishWindup ?? 0) > 0;
+  if (busyFlourish) {
+    // Finish any in-progress cloak cleanly once the flourish ends.
+    if (!c.cloakPhase) return;
+  }
+
+  if (!c.cloakPhase) {
+    if (busyFlourish) return;
+    if (c.state !== 'walk' && c.state !== 'pause' && c.state !== 'approach') return;
+    c.cloakCooldown = (c.cloakCooldown ?? 10) - dt;
+    if ((c.cloakCooldown ?? 0) > 0) return;
+    c.cloakPhase = 'out';
+    c.cloakTimer = GHOSTFREAK_CLOAK_FADE;
+    c.cloakAlpha = 1;
+    return;
+  }
+
+  if (c.cloakPhase === 'out') {
+    c.cloakTimer = (c.cloakTimer ?? GHOSTFREAK_CLOAK_FADE) - dt;
+    c.cloakAlpha = Math.max(0, (c.cloakTimer ?? 0) / GHOSTFREAK_CLOAK_FADE);
+    if ((c.cloakTimer ?? 0) <= 0) {
+      c.cloakPhase = 'hidden';
+      c.cloakTimer = rand(1.1, 2.6);
+      c.cloakAlpha = 0;
+      // Slip a short distance while unseen so reappear feels like a blink.
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const jump = rand(48, 140) * (Math.random() < 0.5 ? -1 : 1);
+      c.x = Math.max(0, Math.min(Math.max(1, vw - c.w), c.x + jump));
+      c.y = Math.max(0, Math.min(Math.max(1, vh - c.h), c.y + rand(-24, 24)));
+    }
+    return;
+  }
+
+  if (c.cloakPhase === 'hidden') {
+    c.cloakTimer = (c.cloakTimer ?? 0) - dt;
+    c.cloakAlpha = 0;
+    if ((c.cloakTimer ?? 0) <= 0) {
+      c.cloakPhase = 'in';
+      c.cloakTimer = GHOSTFREAK_CLOAK_FADE;
+      c.cloakAlpha = 0;
+    }
+    return;
+  }
+
+  // 'in'
+  c.cloakTimer = (c.cloakTimer ?? GHOSTFREAK_CLOAK_FADE) - dt;
+  c.cloakAlpha = Math.min(1, 1 - (c.cloakTimer ?? 0) / GHOSTFREAK_CLOAK_FADE);
+  if ((c.cloakTimer ?? 0) <= 0) {
+    c.cloakPhase = undefined;
+    c.cloakAlpha = 1;
+    c.cloakCooldown = rand(9, 18);
+  }
 }
 
 function emitTrail(c: Critter, particles: Particle[], dt: number): void {
@@ -1137,6 +1210,12 @@ function syncBearPose(c: Critter, dt: number): void {
         c.roarHold = 0;
         c.timer = Math.max(c.timer, windup + flourish + 0.4);
       } else if (isFlourishWalker(c.sprite.id)) {
+        // Don't start a void/sink clip while Ghostfreak is mid-cloak.
+        if (c.sprite.id === 'ghostfreak' && c.cloakPhase) {
+          c.roarTimer = rand(1.2, 2.5);
+          c.bearPose = 'idle';
+          return;
+        }
         // Ragnok keeps current facing for 8-dir flame; others face south for clips.
         const useAura =
           (c.sprite.id === 'necromage' ||
@@ -1321,6 +1400,10 @@ function advanceFrame(c: Critter, dt: number): void {
 function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
   const x = Math.round(c.x);
   const y = Math.round(c.y);
+  const cloakAlpha = c.sprite.id === 'ghostfreak' ? (c.cloakAlpha ?? 1) : 1;
+  if (cloakAlpha <= 0.02) return;
+  const prevAlpha = ctx.globalAlpha;
+  if (cloakAlpha < 0.999) ctx.globalAlpha = prevAlpha * cloakAlpha;
   if (c.sprite.glow) {
     const cx = x + c.w / 2;
     const cy = y + c.h / 2;
@@ -1403,11 +1486,13 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
         ctx.drawImage(img, x, y, c.w, c.h);
       }
     }
+    ctx.globalAlpha = prevAlpha;
     return;
   }
   const frames = c.frames[c.facing === 1 ? 0 : 1];
   const img = frames[c.frame] ?? frames[0];
   if (img) ctx.drawImage(img, x, y);
+  ctx.globalAlpha = prevAlpha;
 }
 
 /**
@@ -1497,6 +1582,7 @@ export default function PixelCritters() {
       for (const c of critters) {
         if (c.sprite.kind === 'flyer') updateFlyer(c, dt, perches, particles);
         else updateGround(c, dt, perches);
+        updateGhostfreakCloak(c, dt);
         advanceFrame(c, dt);
       }
 

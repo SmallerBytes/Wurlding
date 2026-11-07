@@ -11,6 +11,14 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.21',
+    date: '2026-11-06',
+    title: 'Updates to companions',
+    bullets: [
+      'Updates to companions.',
+    ],
+  },
+  {
     version: '0.1.20',
     date: '2026-11-06',
     title: 'Update to companion models',

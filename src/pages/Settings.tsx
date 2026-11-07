@@ -351,41 +351,42 @@ export default function Settings() {
             })}
           </div>
 
-          {draft.critters !== 'off' && motionOn && (
-            <div className="flex flex-col gap-2 border-t border-dusk/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-dusk/60 pt-4">
+            {draft.critters !== 'off' && motionOn && (
               <p className="text-sm text-mist">
                 {draft.desktopCompanions
                   ? 'Companion is on your desktop and stays while Wurlding is open — even minimized.'
                   : 'Add this companion to your desktop so it keeps roaming after you minimize Wurlding.'}
               </p>
+            )}
+            <div className="flex flex-wrap items-center justify-start gap-3">
+              {draft.critters !== 'off' && motionOn && (
+                <button
+                  type="button"
+                  className={draft.desktopCompanions ? 'btn-secondary' : 'btn-primary'}
+                  onClick={toggleDesktopCompanions}
+                >
+                  {draft.desktopCompanions ? 'Remove from screen' : 'Add to screen'}
+                </button>
+              )}
               <button
                 type="button"
-                className={draft.desktopCompanions ? 'btn-secondary' : 'btn-primary'}
-                onClick={toggleDesktopCompanions}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => void save()}
+                disabled={!dirty || saveState === 'saving'}
               >
-                {draft.desktopCompanions ? 'Remove from screen' : 'Add to screen'}
+                Save preferences
               </button>
             </div>
-          )}
+            <p className="text-sm text-mist" role="status">
+              {saveState === 'saving' && 'Saving preferences…'}
+              {saveState === 'saved' && 'Preferences saved. Wurlding will open with this look next time.'}
+              {saveState === 'error' && 'Could not save preferences. Keep this window open and try again.'}
+              {saveState === 'idle' && dirty && 'Save to keep this theme, animation, and companion choice the next time you open Wurlding.'}
+              {saveState === 'idle' && !dirty && 'Saved appearance, animations, and companions are used the next time you open Wurlding.'}
+            </p>
+          </div>
         </section>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-mist" role="status">
-            {saveState === 'saving' && 'Saving preferences…'}
-            {saveState === 'saved' && 'Preferences saved. Wurlding will open with this look next time.'}
-            {saveState === 'error' && 'Could not save preferences. Keep this window open and try again.'}
-            {saveState === 'idle' && dirty && 'Save to keep this theme, animation, and companion choice the next time you open Wurlding.'}
-            {saveState === 'idle' && !dirty && 'Saved appearance, animations, and companions are used the next time you open Wurlding.'}
-          </p>
-          <button
-            type="button"
-            className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => void save()}
-            disabled={!dirty || saveState === 'saving'}
-          >
-            Save preferences
-          </button>
-        </div>
 
         <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="updates-heading">
           <div>

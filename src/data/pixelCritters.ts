@@ -720,7 +720,7 @@ const IRON_GIANT: CritterSprite = {
   frames: [['.']],
 };
 
-/** Ghostfreak — drift / idle + stomach-void or sink flourish. */
+/** Ghostfreak — drift / idle + stomach-void or sink flourish (no glow trail). */
 const GHOSTFREAK: CritterSprite = {
   id: 'ghostfreak',
   name: 'Ghostfreak',
@@ -731,8 +731,6 @@ const GHOSTFREAK: CritterSprite = {
   hops: false,
   imageAtlas: true,
   atlasSize: 64,
-  trail: '#e879f9',
-  glow: 'rgba(232, 121, 249, 0.22)',
   palette: {},
   frames: [['.']],
 };
