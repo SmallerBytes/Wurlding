@@ -30,7 +30,7 @@ export const GHOSTFREAK_FRAME_TIME = 0.1;
 export const GHOSTFREAK_VOID_FRAME_TIME = 0.09;
 /** Sink-beneath-floor flourish. */
 export const GHOSTFREAK_SINK_FRAME_TIME = 0.09;
-export const GHOSTFREAK_ATLAS_REV = 1;
+export const GHOSTFREAK_ATLAS_REV = 2;
 
 const MOVE_FRAME_COUNT = 9;
 const VOID_FRAME_COUNT = 41;
