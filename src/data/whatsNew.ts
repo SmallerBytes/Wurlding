@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.31',
+    date: '2026-11-07',
+    title: 'Custom companion walk mapping and more wallpapers',
+    bullets: [
+      'PixelLab imports now recognize stride/step/run-style walk cycles (not only “moving” / “walk” names).',
+      'Clearer Add-your-own guidance for which animation names map to idle, walk, and flourishes.',
+      'New companion desktop backgrounds: desert trail, reef with sunlit arch, and sunset above the clouds.',
+    ],
+  },
+  {
     version: '0.1.30',
     date: '2026-11-07',
     title: 'Companions page and PixelLab custom uploads',

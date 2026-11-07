@@ -63,6 +63,27 @@ const DESKTOP_BACKGROUNDS = [
     file: 'sunlit-woodland-clearing.png',
     download: 'wurlding-sunlit-woodland-clearing.png',
   },
+  {
+    id: 'desert-trail',
+    title: 'Desert trail with cacti',
+    alt: 'Pixel-art desert trail with sandstone rocks, blooming cacti, and a winding sandy path',
+    file: 'desert-trail-cacti.png',
+    download: 'wurlding-desert-trail-cacti.png',
+  },
+  {
+    id: 'reef-arch',
+    title: 'Reef with sunlit arch',
+    alt: 'Pixel-art underwater reef with coral, a stone arch, and light beams through the water',
+    file: 'reef-sunlit-arch.png',
+    download: 'wurlding-reef-sunlit-arch.png',
+  },
+  {
+    id: 'sunset-clouds',
+    title: 'Sunset above the clouds',
+    alt: 'Pixel-art sunset above fluffy clouds with golden light rays across a blue sky',
+    file: 'sunset-above-clouds.png',
+    download: 'wurlding-sunset-above-clouds.png',
+  },
 ] as const;
 
 function desktopBgUrl(file: string): string {
@@ -349,13 +370,41 @@ export default function Companions() {
               <Upload className="h-5 w-5 text-fey" aria-hidden />
               Add your own
             </h2>
-            <p className="text-sm text-mist">
-              Export from PixelLab.ai, unzip, then upload the folder that contains{' '}
-              <code className="text-moonlight">metadata.json</code> (for example a folder like{' '}
-              <code className="text-moonlight">Mew/</code> with Idle animations inside). Walk and
-              idle are used for roaming; one extra flourish may play on pause. Rotations stills are
-              ignored.
-            </p>
+            <div className="space-y-2 text-sm text-mist">
+              <p>
+                Export from PixelLab.ai, unzip, then upload the folder that contains{' '}
+                <code className="text-moonlight">metadata.json</code> (for example{' '}
+                <code className="text-moonlight">Mew/</code> or{' '}
+                <code className="text-moonlight">Diamond_Head/</code> with Idle animations inside).
+                Rotations stills are ignored.
+              </p>
+              <p>
+                Wurlding maps clips from their PixelLab <span className="text-moonlight">animation names</span>, not the folder title:
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <span className="text-moonlight">Idle</span> → standing / breathing loop
+                </li>
+                <li>
+                  Names with <span className="text-moonlight">walk</span>,{' '}
+                  <span className="text-moonlight">step</span>,{' '}
+                  <span className="text-moonlight">stride</span>,{' '}
+                  <span className="text-moonlight">run</span>, or{' '}
+                  <span className="text-moonlight">moving</span> → walk cycle
+                </li>
+                <li>
+                  Names with <span className="text-moonlight">punch</span>,{' '}
+                  <span className="text-moonlight">attack</span>,{' '}
+                  <span className="text-moonlight">summon</span>,{' '}
+                  <span className="text-moonlight">void</span>,{' '}
+                  <span className="text-moonlight">sink</span>, etc. → optional pause flourish
+                </li>
+              </ul>
+              <p>
+                You do not need to rename folders. Clearer animation names in PixelLab just make
+                mapping more reliable when a pack has several clips.
+              </p>
+            </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-mist">

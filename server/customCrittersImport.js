@@ -272,27 +272,77 @@ function frameIndex(rel) {
   return 0;
 }
 
+function facingCount(byFacing) {
+  if (!byFacing || typeof byFacing !== 'object') return 0;
+  return FACINGS.filter((f) => Array.isArray(byFacing[f]) && byFacing[f].length > 0).length;
+}
+
+function looksLikeWalkName(l) {
+  return (
+    l === 'moving' ||
+    l === 'walk' ||
+    l.includes('idle_moving') ||
+    (l.includes('moving') && !l.includes('bubble')) ||
+    l.includes('walk') ||
+    l.includes('step') ||
+    l.includes('stride') ||
+    l.includes('march') ||
+    l.includes('run') ||
+    l.includes('tread') ||
+    l.includes('locomot')
+  );
+}
+
+function looksLikeFlourishName(l) {
+  return (
+    l.includes('void') ||
+    l.includes('stomach') ||
+    l.includes('split') ||
+    l.includes('sink') ||
+    l.includes('float_down') ||
+    l.includes('disappear') ||
+    l.includes('punch') ||
+    l.includes('attack') ||
+    l.includes('summon') ||
+    l.includes('slash') ||
+    l.includes('roar') ||
+    l.includes('flame') ||
+    l.includes('burst')
+  );
+}
+
 function mapPoses(anims) {
   const names = Object.keys(anims);
   const lower = (s) => s.toLowerCase();
-
   const pick = (pred) => names.find((n) => pred(n, lower(n)));
 
   const idleName =
     pick((n, l) => n === 'Idle' || l === 'idle') ||
     pick((n, l) => l === 'idle_moving' || l.includes('idle_moving'));
 
-  const walkName =
-    pick((n, l) => l === 'moving' || n === 'moving') ||
-    pick((n, l) => l === 'idle_moving' || l.includes('idle_moving')) ||
-    pick((n, l) => l === 'walk' || l.includes('walk')) ||
-    pick((_n, l) => l.includes('moving') && !l.includes('bubble'));
+  // Prefer explicit locomotion names, then any other wide (6+ dir) clip that isn't Idle.
+  let walkName =
+    pick((n, l) => looksLikeWalkName(l) && n !== idleName) ||
+    pick(
+      (n, l) =>
+        n !== idleName &&
+        !looksLikeFlourishName(l) &&
+        facingCount(anims[n]) >= 6,
+    );
+
+  // Idle_Moving packs: same clip often serves as both walk and idle.
+  if (!walkName && idleName && lower(idleName).includes('moving')) {
+    walkName = idleName;
+  }
 
   const used = new Set([idleName, walkName].filter(Boolean));
   const roarName =
-    pick((n, l) => !used.has(n) && (l.includes('void') || l.includes('stomach') || l.includes('split'))) ||
-    pick((n, l) => !used.has(n) && (l.includes('sink') || l.includes('float_down') || l.includes('disappear'))) ||
-    pick((n) => !used.has(n));
+    pick((n, l) => !used.has(n) && looksLikeFlourishName(l)) ||
+    // Prefer shorter facing sets (south-only / 3-dir oneshots) over leftover locomotion.
+    names
+      .filter((n) => !used.has(n))
+      .sort((a, b) => facingCount(anims[a]) - facingCount(anims[b]) || a.localeCompare(b))[0] ||
+    null;
 
   return {
     idle: idleName ? anims[idleName] : walkName ? anims[walkName] : null,
