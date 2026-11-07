@@ -24,13 +24,21 @@ export type CritterId =
   | 'void-walker'
   | 'goblin-priest'
   | 'fae-princess'
-  | 'ragnok';
+  | 'ragnok'
+  | 'necromage'
+  | 'golem'
+  | 'victfur'
+  | 'iron-giant';
 
 export type CritterGenre =
   | 'off'
   | 'fae-princess'
   | 'goblin-priest'
   | 'ragnok'
+  | 'necromage'
+  | 'golem'
+  | 'victfur'
+  | 'iron-giant'
   | 'wilds'
   | 'alligator-bear'
   | 'crabacus'
@@ -42,6 +50,10 @@ export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'fae-princess',
   'goblin-priest',
   'ragnok',
+  'necromage',
+  'golem',
+  'victfur',
+  'iron-giant',
   'wilds',
   'alligator-bear',
   'crabacus',
@@ -640,6 +652,71 @@ const RAGNOK: CritterSprite = {
   frames: [['.']],
 };
 
+/** Necromage — walk / idle + green staff-flame or shadow flourish. */
+const NECROMAGE: CritterSprite = {
+  id: 'necromage',
+  name: 'Necromage',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 38,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 64,
+  trail: '#a78bfa',
+  glow: 'rgba(167, 139, 250, 0.28)',
+  palette: {},
+  frames: [['.']],
+};
+
+/** The Golem — walk / idle + earth-channel or shoulder bird lift-off. */
+const GOLEM: CritterSprite = {
+  id: 'golem',
+  name: 'The Golem',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.14,
+  speed: 28,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 56,
+  trail: '#84cc16',
+  palette: {},
+  frames: [['.']],
+};
+
+/** Victfur — walk / idle + cigarette-case or hat-tip flourish. */
+const VICTFUR: CritterSprite = {
+  id: 'victfur',
+  name: 'Victfur',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 36,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 68,
+  trail: '#94a3b8',
+  palette: {},
+  frames: [['.']],
+};
+
+/** The Iron Giant — walk / idle + eye-flash flourish. */
+const IRON_GIANT: CritterSprite = {
+  id: 'iron-giant',
+  name: 'The Iron Giant',
+  kind: 'walker',
+  scale: 2,
+  frameTime: 0.12,
+  speed: 32,
+  hops: false,
+  imageAtlas: true,
+  atlasSize: 96,
+  trail: '#94a3b8',
+  palette: {},
+  frames: [['.']],
+};
+
 export const CRITTERS: Record<CritterId, CritterSprite> = {
   fairy: FAIRY,
   pixie: PIXIE,
@@ -657,6 +734,10 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   'goblin-priest': GOBLIN_PRIEST,
   'fae-princess': FAE_PRINCESS,
   ragnok: RAGNOK,
+  necromage: NECROMAGE,
+  golem: GOLEM,
+  victfur: VICTFUR,
+  'iron-giant': IRON_GIANT,
 };
 
 export interface CritterGenreInfo {
@@ -696,6 +777,34 @@ export const CRITTER_GENRES: CritterGenreInfo[] = [
     label: 'Ragnok the Hoarder',
     description: 'A squat dragon-hoarder who bursts into bright orange flame.',
     cast: ['ragnok'],
+    count: 1,
+  },
+  {
+    id: 'necromage',
+    label: 'Necromage',
+    description: 'A one-eyed skeleton mage who conjures green flame and shadows.',
+    cast: ['necromage'],
+    count: 1,
+  },
+  {
+    id: 'golem',
+    label: 'The Golem',
+    description: 'A vine-wrapped stone giant who channels earth and startles birds.',
+    cast: ['golem'],
+    count: 1,
+  },
+  {
+    id: 'victfur',
+    label: 'Victfur',
+    description: 'A plump Victorian Maine Coon who tips his hat and draws a cigarette case.',
+    cast: ['victfur'],
+    count: 1,
+  },
+  {
+    id: 'iron-giant',
+    label: 'The Iron Giant',
+    description: 'A towering gunmetal robot who strides the floor and flashes his eyes red.',
+    cast: ['iron-giant'],
     count: 1,
   },
   {

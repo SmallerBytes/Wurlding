@@ -267,9 +267,9 @@ export default function Settings() {
               Pixel companions
             </h2>
             <p className="text-sm text-mist">
-              Little 16-bit creatures that wander the window: perching on headings, strolling along
-              the tops of cards, hopping between panels, and circling your work. Pick a genre to choose
-              who shows up.
+              Little creatures that wander the window: perching on headings, strolling along
+              the tops of cards, hopping between panels, and circling your work. Pick a companion
+              to choose who shows up.
               {!motionOn && ' They stay hidden while animations are off.'}
             </p>
           </div>
@@ -277,7 +277,7 @@ export default function Settings() {
           <div
             className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
             role="radiogroup"
-            aria-label="Pixel companion genre"
+            aria-label="Pixel companion"
           >
             {visibleCritterGenres().map((genre) => {
               const selected = draft.critters === genre.id;

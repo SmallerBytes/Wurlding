@@ -41,6 +41,34 @@ import {
   preloadRagnok,
 } from '../data/ragnokHoarder';
 import {
+  NECROMAGE_ATLAS_REV,
+  NECROMAGE_FLAME_FRAME_TIME,
+  NECROMAGE_SHADOW_FRAME_TIME,
+  preloadNecromage,
+} from '../data/necromage';
+import {
+  GOLEM_ATLAS_REV,
+  GOLEM_CHANNEL_FRAME_TIME,
+  GOLEM_CHANNEL_DRAW_SCALE,
+  GOLEM_IDLE_DRAW_SCALE,
+  GOLEM_LIFT_DRAW_SCALE,
+  GOLEM_LIFT_FRAME_TIME,
+  GOLEM_WALK_DRAW_SCALE,
+  preloadGolem,
+} from '../data/golem';
+import {
+  VICTFUR_ATLAS_REV,
+  VICTFUR_COAT_FRAME_TIME,
+  VICTFUR_HAT_DRAW_SCALE,
+  VICTFUR_HAT_FRAME_TIME,
+  preloadVictfur,
+} from '../data/victfur';
+import {
+  IRON_GIANT_ATLAS_REV,
+  IRON_GIANT_FLASH_FRAME_TIME,
+  preloadIronGiant,
+} from '../data/ironGiant';
+import {
   VOID_ATTACK_DRAW_SCALE,
   VOID_ATTACK_FRAME_TIME,
   VOID_WALKER_ATLAS_REV,
@@ -56,7 +84,30 @@ import {
 } from '../data/pixelCritters';
 
 /** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
-const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}`;
+const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}`;
+
+/** Floor-wander atlas companions with frame-driven oneshot flourishes. */
+function isFlourishWalker(id: CritterId): boolean {
+  return (
+    id === 'ragnok' ||
+    id === 'necromage' ||
+    id === 'golem' ||
+    id === 'victfur' ||
+    id === 'iron-giant'
+  );
+}
+
+function flourishPeriod(c: Critter): number {
+  if (c.sprite.id === 'ragnok' && c.bearPose === 'roar') return RAGNOK_FLAME_FRAME_TIME;
+  if (c.sprite.id === 'necromage' && c.bearPose === 'roar') return NECROMAGE_FLAME_FRAME_TIME;
+  if (c.sprite.id === 'necromage' && c.bearPose === 'aura') return NECROMAGE_SHADOW_FRAME_TIME;
+  if (c.sprite.id === 'golem' && c.bearPose === 'roar') return GOLEM_CHANNEL_FRAME_TIME;
+  if (c.sprite.id === 'golem' && c.bearPose === 'aura') return GOLEM_LIFT_FRAME_TIME;
+  if (c.sprite.id === 'victfur' && c.bearPose === 'roar') return VICTFUR_COAT_FRAME_TIME;
+  if (c.sprite.id === 'victfur' && c.bearPose === 'aura') return VICTFUR_HAT_FRAME_TIME;
+  if (c.sprite.id === 'iron-giant' && c.bearPose === 'roar') return IRON_GIANT_FLASH_FRAME_TIME;
+  return c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
+}
 
 /** Page furniture a companion may land on, walk along, or circle. */
 const PERCH_SELECTOR = [
@@ -139,8 +190,8 @@ interface Critter {
   faeLaunchCool?: number;
   /** Fae Princess: seconds perched before the aura cycle. */
   faeAuraClock?: number;
-  /** Ragnok: facing locked for the current flame burst. */
-  ragnokFlameFacing?: BearFacing;
+  /** Facing locked for the current oneshot flourish (flame / conjure / channel). */
+  flourishFacing?: BearFacing;
   sleepPause?: boolean;
   /** Seconds until an atlas companion with sleep extras wants another nap. */
   sleepCooldown?: number;
@@ -341,7 +392,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
       sprite.atlasExtras ||
       sprite.id === 'void-walker' ||
       sprite.id === 'goblin-priest' ||
-      sprite.id === 'ragnok'
+      isFlourishWalker(sprite.id)
         ? rand(5, 12)
         : undefined,
     roarHold: 0,
@@ -350,7 +401,7 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
     faeSouthClock: 0,
     faeLaunchCool: 0,
     faeAuraClock: 0,
-    ragnokFlameFacing: undefined,
+    flourishFacing: undefined,
     sleepPause: false,
     sleepPhase: undefined,
     // Sleep cycle is Alligator Bear only.
@@ -825,11 +876,9 @@ function bearFrameList(c: Critter): HTMLCanvasElement[] | undefined {
     );
   }
   if (pose === 'roar') {
-    // Ragnok has all 8 flame facings; bear roar GIFs do not (north remaps).
-    if (c.sprite.id === 'ragnok') {
-      const locked = c.ragnokFlameFacing ?? facing;
-      // Never fall back to idle mid-burst — that cut the clip to 8 frames and
-      // looked like a failed/missing flame. Prefer locked facing, then south.
+    // Flourish walkers keep locked/south roar clips; bear roar GIFs remap north.
+    if (isFlourishWalker(c.sprite.id)) {
+      const locked = c.flourishFacing ?? facing;
       const flame =
         c.bearFrames.get(`roar:${locked}`) ?? c.bearFrames.get('roar:south');
       return flame?.length ? flame : undefined;
@@ -973,25 +1022,26 @@ function syncBearPose(c: Critter, dt: number): void {
   }
   // One-shot flourish (sword / kick / mask) — hold through the full clip.
   if ((c.roarHold ?? 0) > 0) {
-    // Ragnok flame is frame-driven (oneshot below). A wall-clock hold used to
-    // expire early because frameClock discarded remainder each step, so the
-    // burst died mid-cycle — and a missing atlas key drew nothing at all.
-    if (c.sprite.id === 'ragnok') {
-      const locked = c.ragnokFlameFacing ?? c.bearFacing ?? 'south';
-      const flame =
-        c.bearFrames?.get(`roar:${locked}`) ?? c.bearFrames?.get('roar:south');
-      if (!flame?.length) {
+    // Flourish walkers are frame-driven (oneshot below) — don't kill on wall-clock.
+    if (isFlourishWalker(c.sprite.id)) {
+      const pose = c.bearPose === 'aura' ? 'aura' : 'roar';
+      const locked =
+        c.flourishFacing ??
+        (c.sprite.id === 'ragnok' ? c.bearFacing ?? 'south' : 'south');
+      const frames =
+        c.bearFrames?.get(`${pose}:${locked}`) ?? c.bearFrames?.get(`${pose}:south`);
+      if (!frames?.length) {
         c.roarHold = 0;
         c.bearPose = 'idle';
-        c.ragnokFlameFacing = undefined;
+        c.flourishFacing = undefined;
         c.roarTimer = rand(4, 8);
         c.frame = 0;
         c.frameClock = 0;
         return;
       }
-      c.bearPose = 'roar';
+      c.bearPose = pose;
       c.bearFacing = locked;
-      c.ragnokFlameFacing = locked;
+      c.flourishFacing = locked;
       return;
     }
     c.roarHold = (c.roarHold ?? 0) - dt;
@@ -1066,7 +1116,6 @@ function syncBearPose(c: Critter, dt: number): void {
     if ((c.roarTimer ?? 0) <= 0) {
       const isVoid = c.sprite.id === 'void-walker';
       const isGoblin = c.sprite.id === 'goblin-priest';
-      const isRagnok = c.sprite.id === 'ragnok';
       c.frame = 0;
       c.frameClock = 0;
       if (isVoid) {
@@ -1078,26 +1127,32 @@ function syncBearPose(c: Critter, dt: number): void {
         c.flourishWindup = windup;
         c.roarHold = 0;
         c.timer = Math.max(c.timer, windup + flourish + 0.4);
-      } else if (isRagnok) {
-        const facing = c.bearFacing ?? 'south';
-        const frames = c.bearFrames?.get(`roar:${facing}`) ?? c.bearFrames?.get('roar:south');
+      } else if (isFlourishWalker(c.sprite.id)) {
+        // Ragnok keeps current facing for 8-dir flame; others face south for clips.
+        const useAura =
+          (c.sprite.id === 'necromage' ||
+            c.sprite.id === 'golem' ||
+            c.sprite.id === 'victfur') &&
+          Math.random() < 0.4;
+        const pose: BearPose = useAura ? 'aura' : 'roar';
+        // Ragnok keeps facing for 8-dir flame; others face south for their clips.
+        const facing: BearFacing =
+          c.sprite.id === 'ragnok' && !useAura ? (c.bearFacing ?? 'south') : 'south';
+        const frames =
+          c.bearFrames?.get(`${pose}:${facing}`) ?? c.bearFrames?.get(`${pose}:south`);
         if (!frames || frames.length < 2) {
-          // Atlas still loading / failed for this facing — retry soon, stay visible.
           c.roarTimer = rand(1.5, 3);
           c.bearPose = 'idle';
           return;
         }
-        const count = frames.length;
-        // Pause long enough for the full oneshot; completion is frame-driven
-        // (roarHold is not decremented for Ragnok — see syncBearPose above).
-        const hold = count * RAGNOK_FLAME_FRAME_TIME + 0.5;
-        c.bearPose = 'roar';
+        c.bearPose = pose;
         c.bearFacing = facing;
-        c.ragnokFlameFacing = facing;
-        c.roarHold = hold;
+        c.flourishFacing = facing;
+        // Flag only — oneshot in advanceFrame clears the hold.
+        c.roarHold = frames.length * flourishPeriod(c) + 0.5;
         c.roarTimer = rand(10, 18);
         c.state = 'pause';
-        c.timer = Math.max(c.timer, hold + 0.35);
+        c.timer = Math.max(c.timer, (c.roarHold ?? 0) + 0.35);
       } else if (isGoblin) {
         // Fight-idle → kick → fight-idle, or fight-idle → mask → walk.
         const doMask = Math.random() < 0.4;
@@ -1149,7 +1204,7 @@ function advanceFrame(c: Critter, dt: number): void {
         (prevPose === 'launch' && c.bearPose === 'launch') ||
         (prevPose === 'kiss' && c.bearPose === 'kiss') ||
         (prevPose === 'aura' && c.bearPose === 'aura') ||
-        (prevPose === 'roar' && c.bearPose === 'roar' && c.sprite.id === 'ragnok');
+        (prevPose === 'roar' && c.bearPose === 'roar' && isFlourishWalker(c.sprite.id));
       if (!sticky) {
         c.frame = 0;
         c.frameClock = 0;
@@ -1184,11 +1239,14 @@ function advanceFrame(c: Critter, dt: number): void {
     const frames = bearFrameList(c);
     const count = frames?.length ?? 1;
     if (count <= 1) {
-      // Ragnok roar with no atlas → abort so he doesn't sit invisible.
-      if (c.sprite.id === 'ragnok' && c.bearPose === 'roar') {
+      // Flourish with no atlas → abort so they don't sit invisible.
+      if (
+        isFlourishWalker(c.sprite.id) &&
+        (c.bearPose === 'roar' || c.bearPose === 'aura')
+      ) {
         c.roarHold = 0;
         c.bearPose = 'idle';
-        c.ragnokFlameFacing = undefined;
+        c.flourishFacing = undefined;
         c.roarTimer = rand(4, 8);
       }
       c.frame = 0;
@@ -1197,8 +1255,8 @@ function advanceFrame(c: Critter, dt: number): void {
     const period =
       c.sprite.id === 'void-walker' && c.bearPose === 'roar'
         ? VOID_ATTACK_FRAME_TIME
-        : c.sprite.id === 'ragnok' && c.bearPose === 'roar'
-          ? RAGNOK_FLAME_FRAME_TIME
+        : isFlourishWalker(c.sprite.id) && (c.bearPose === 'roar' || c.bearPose === 'aura')
+          ? flourishPeriod(c)
           : c.sprite.id === 'goblin-priest' && c.bearPose === 'mask'
             ? GOBLIN_MASK_FRAME_TIME
             : c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
@@ -1219,12 +1277,15 @@ function advanceFrame(c: Critter, dt: number): void {
       c.frame += 1;
       return;
     }
-    // Ragnok flame: play once through, then clear the hold (don't wrap/% mid-burst).
-    if (c.sprite.id === 'ragnok' && c.bearPose === 'roar') {
+    // Flourish walkers: play once through, then clear the hold (don't wrap mid-burst).
+    if (
+      isFlourishWalker(c.sprite.id) &&
+      (c.bearPose === 'roar' || c.bearPose === 'aura')
+    ) {
       if (c.frame + 1 >= count) {
         c.roarHold = 0;
         c.bearPose = 'idle';
-        c.ragnokFlameFacing = undefined;
+        c.flourishFacing = undefined;
         c.roarTimer = rand(8, 14);
         c.timer = Math.max(c.timer, rand(1.2, 2.4));
         c.frame = 0;
@@ -1295,6 +1356,36 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
       } else if (c.sprite.id === 'void-walker' && c.bearPose === 'roar') {
         const dw = Math.max(1, Math.round(c.w * VOID_ATTACK_DRAW_SCALE));
         const dh = Math.max(1, Math.round(c.h * VOID_ATTACK_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'golem' && c.bearPose === 'idle') {
+        const dw = Math.max(1, Math.round(c.w * GOLEM_IDLE_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * GOLEM_IDLE_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'golem' && c.bearPose === 'walk') {
+        const dw = Math.max(1, Math.round(c.w * GOLEM_WALK_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * GOLEM_WALK_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'golem' && c.bearPose === 'roar') {
+        const dw = Math.max(1, Math.round(c.w * GOLEM_CHANNEL_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * GOLEM_CHANNEL_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'golem' && c.bearPose === 'aura') {
+        const dw = Math.max(1, Math.round(c.w * GOLEM_LIFT_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * GOLEM_LIFT_DRAW_SCALE));
+        const dx = x + Math.floor((c.w - dw) / 2);
+        const dy = y + (c.h - dh);
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else if (c.sprite.id === 'victfur' && c.bearPose === 'aura') {
+        const dw = Math.max(1, Math.round(c.w * VICTFUR_HAT_DRAW_SCALE));
+        const dh = Math.max(1, Math.round(c.h * VICTFUR_HAT_DRAW_SCALE));
         const dx = x + Math.floor((c.w - dw) / 2);
         const dy = y + (c.h - dh);
         ctx.drawImage(img, dx, dy, dw, dh);
@@ -1439,6 +1530,10 @@ export default function PixelCritters() {
           else if (id === 'goblin-priest') atlasById.set(id, await preloadGoblinPriest());
           else if (id === 'fae-princess') atlasById.set(id, await preloadFaePrincess());
           else if (id === 'ragnok') atlasById.set(id, await preloadRagnok());
+          else if (id === 'necromage') atlasById.set(id, await preloadNecromage());
+          else if (id === 'golem') atlasById.set(id, await preloadGolem());
+          else if (id === 'victfur') atlasById.set(id, await preloadVictfur());
+          else if (id === 'iron-giant') atlasById.set(id, await preloadIronGiant());
         }),
       );
       if (disposed) return;

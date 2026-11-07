@@ -5,6 +5,10 @@ import { loadWyvernFrames } from '../data/emeraldWyvern';
 import { loadFaeFrames } from '../data/faePrincess';
 import { loadGoblinFrames } from '../data/goblinPriest';
 import { loadRagnokFrames } from '../data/ragnokHoarder';
+import { loadNecromageFrames } from '../data/necromage';
+import { loadGolemFrames } from '../data/golem';
+import { loadVictfurFrames } from '../data/victfur';
+import { loadIronGiantFrames } from '../data/ironGiant';
 import { loadVoidFrames } from '../data/voidWalker';
 import { renderSpriteFrame, spriteSize, type CritterSprite } from '../data/pixelCritters';
 
@@ -92,7 +96,15 @@ export default function PixelSpritePreview({
                     ? await loadFaeFrames('walk', 'south')
                     : sprite.id === 'ragnok'
                       ? await loadRagnokFrames('idle', 'south')
-                      : await loadBearFrames('idle', 'south');
+                      : sprite.id === 'necromage'
+                        ? await loadNecromageFrames('idle', 'south')
+                        : sprite.id === 'golem'
+                          ? await loadGolemFrames('idle', 'south')
+                          : sprite.id === 'victfur'
+                            ? await loadVictfurFrames('idle', 'south')
+                            : sprite.id === 'iron-giant'
+                              ? await loadIronGiantFrames('idle', 'south')
+                              : await loadBearFrames('idle', 'south');
         if (cancelled || !frames.length) return;
         let index = 0;
         drawImageFrame(frames[0]!);

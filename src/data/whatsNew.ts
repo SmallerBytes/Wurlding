@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.17',
+    date: '2026-11-06',
+    title: 'More companions: Necromage, Golem, Victfur, Iron Giant',
+    bullets: [
+      'New companions: Necromage, The Golem, Victfur, and The Iron Giant (with an eye-flash flourish).',
+      'Companion picker copy no longer calls them 16-bit or “genres.”',
+      'Golem and Victfur flourish sizing polish.',
+    ],
+  },
+  {
     version: '0.1.16',
     date: '2026-11-06',
     title: 'Ragnok flame burst reliability',
