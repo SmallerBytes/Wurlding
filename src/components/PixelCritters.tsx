@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CRITTERS_EVENT,
+  CRITTER_SCALES_EVENT,
   MOTION_EVENT,
+  getCritterScaleFactor,
+  getStoredCritterScales,
   getStoredCritters,
   getStoredMotion,
+  normalizeCritterScales,
   normalizeCritterSelection,
+  serializeCritterScales,
+  type CritterScaleMap,
   type CritterSelection,
   type MotionPref,
 } from '../theme';
@@ -97,7 +103,7 @@ import {
   preloadVoidWalker,
 } from '../data/voidWalker';
 import {
-  CRITTERS,
+  getBuiltInCritter,
   getCritterGenre,
   renderSpriteFrame,
   spriteSize,
@@ -105,13 +111,23 @@ import {
   type CritterId,
   type CritterSprite,
 } from '../data/pixelCritters';
+import {
+  CUSTOM_CRITTER_FLOURISH_FRAME_TIME,
+  fetchCustomCritters,
+  getCachedCustomCritters,
+  isCustomCritterId,
+  preloadCustomCritter,
+  resolveCustomCritter,
+  resolveCustomManifest,
+  subscribeCustomCritters,
+} from '../data/customCritters';
 
 /** Stable atlas fingerprint so HMR never changes useEffect dep array length. */
 const atlasRev = `${ALLIGATOR_BEAR_ATLAS_REV}:${CRABACUS_ATLAS_REV}:${EMERALD_WYVERN_ATLAS_REV}:${VOID_WALKER_ATLAS_REV}:${GOBLIN_PRIEST_ATLAS_REV}:${FAE_PRINCESS_ATLAS_REV}:${RAGNOK_ATLAS_REV}:${NECROMAGE_ATLAS_REV}:${GOLEM_ATLAS_REV}:${VICTFUR_ATLAS_REV}:${IRON_GIANT_ATLAS_REV}:${GHOSTFREAK_ATLAS_REV}:${MEW_ATLAS_REV}`;
 
 /** Floor-wander atlas companions with frame-driven oneshot flourishes. */
 function isFlourishWalker(id: CritterId): boolean {
-  return (
+  if (
     id === 'ragnok' ||
     id === 'necromage' ||
     id === 'golem' ||
@@ -119,7 +135,13 @@ function isFlourishWalker(id: CritterId): boolean {
     id === 'iron-giant' ||
     id === 'ghostfreak' ||
     id === 'mew'
-  );
+  ) {
+    return true;
+  }
+  if (isCustomCritterId(id)) {
+    return Boolean(resolveCustomManifest(id)?.poses.roar);
+  }
+  return false;
 }
 
 function flourishPeriod(c: Critter): number {
@@ -136,6 +158,7 @@ function flourishPeriod(c: Critter): number {
   if (c.sprite.id === 'mew' && c.bearPose === 'roar') return MEW_TO_BUBBLE_FRAME_TIME;
   if (c.sprite.id === 'mew' && c.bearPose === 'aura') return MEW_POP_FRAME_TIME;
   if (c.sprite.id === 'mew' && c.bearPose === 'kick') return MEW_SINK_FRAME_TIME;
+  if (isCustomCritterId(c.sprite.id) && c.bearPose === 'roar') return CUSTOM_CRITTER_FLOURISH_FRAME_TIME;
   return c.sprite.frameTime || ALLIGATOR_BEAR_FRAME_TIME;
 }
 
@@ -486,14 +509,20 @@ function moveToward(c: Critter, dt: number, speed: number): number {
   return dist - step;
 }
 
-function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]>): Critter | null {
-  const sprite = CRITTERS[id];
+function makeCritter(
+  id: CritterId,
+  bearFrames?: Map<string, HTMLCanvasElement[]>,
+  scales?: CritterScaleMap,
+): Critter | null {
+  const sprite = isCustomCritterId(id) ? resolveCustomCritter(id) : getBuiltInCritter(id);
+  if (!sprite) return null;
   if (sprite.imageAtlas && !bearFrames) return null;
   const frames = framesFor(sprite);
   if (!frames) return null;
   const size = spriteSize(sprite);
-  const w = size.w * sprite.scale;
-  const h = size.h * sprite.scale;
+  const userScale = getCritterScaleFactor(sprite.id, scales);
+  const w = Math.max(1, Math.round(size.w * sprite.scale * userScale));
+  const h = Math.max(1, Math.round(size.h * sprite.scale * userScale));
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const c: Critter = {
@@ -515,7 +544,8 @@ function makeCritter(id: CritterId, bearFrames?: Map<string, HTMLCanvasElement[]
         : sprite.atlasExtras ||
             sprite.id === 'void-walker' ||
             sprite.id === 'goblin-priest' ||
-            isFlourishWalker(sprite.id)
+            isFlourishWalker(sprite.id) ||
+            isCustomCritterId(sprite.id)
           ? rand(5, 12)
           : undefined,
     roarHold: 0,
@@ -1856,7 +1886,14 @@ function drawCritter(ctx: CanvasRenderingContext2D, c: Critter): void {
 export default function PixelCritters() {
   const [motion, setMotion] = useState<MotionPref>(() => getStoredMotion());
   const [selection, setSelection] = useState<CritterSelection>(() => getStoredCritters());
+  const [scales, setScales] = useState<CritterScaleMap>(() => getStoredCritterScales());
+  const [customRev, setCustomRev] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    void fetchCustomCritters();
+    return subscribeCustomCritters(() => setCustomRev((n) => n + 1));
+  }, []);
 
   useEffect(() => {
     const onMotion = (e: Event) => {
@@ -1866,15 +1903,24 @@ export default function PixelCritters() {
     const onCritters = (e: Event) => {
       setSelection(normalizeCritterSelection((e as CustomEvent<unknown>).detail));
     };
+    const onScales = (e: Event) => {
+      setScales(normalizeCritterScales((e as CustomEvent<unknown>).detail));
+    };
     window.addEventListener(MOTION_EVENT, onMotion);
     window.addEventListener(CRITTERS_EVENT, onCritters);
+    window.addEventListener(CRITTER_SCALES_EVENT, onScales);
     return () => {
       window.removeEventListener(MOTION_EVENT, onMotion);
       window.removeEventListener(CRITTERS_EVENT, onCritters);
+      window.removeEventListener(CRITTER_SCALES_EVENT, onScales);
     };
   }, []);
 
   const active = motion === 'on' && selection.length > 0;
+  const scalesKey = serializeCritterScales(scales);
+  const customKey = `${customRev}:${getCachedCustomCritters()
+    .map((m) => m.slug)
+    .join(',')}`;
 
   useEffect(() => {
     if (!active) return;
@@ -1984,11 +2030,15 @@ export default function PixelCritters() {
           else if (id === 'iron-giant') atlasById.set(id, await preloadIronGiant());
           else if (id === 'ghostfreak') atlasById.set(id, await preloadGhostfreak());
           else if (id === 'mew') atlasById.set(id, await preloadMew());
+          else if (isCustomCritterId(id)) {
+            const manifest = resolveCustomManifest(id);
+            if (manifest) atlasById.set(id, await preloadCustomCritter(manifest));
+          }
         }),
       );
       if (disposed) return;
       critters = cast
-        .map((id) => makeCritter(id, atlasById.get(id)))
+        .map((id) => makeCritter(id, atlasById.get(id), scales))
         .filter((c): c is Critter => c !== null);
       raf = window.requestAnimationFrame(tick);
     })();
@@ -2001,7 +2051,7 @@ export default function PixelCritters() {
       document.removeEventListener('visibilitychange', onVisibility);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [active, selection.join(','), atlasRev]);
+  }, [active, selection.join(','), scalesKey, atlasRev, customKey]);
 
   if (!active) return null;
 

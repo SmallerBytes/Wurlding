@@ -8,7 +8,7 @@
 
 export type CritterKind = 'flyer' | 'walker' | 'crawler';
 
-export type CritterId =
+export type BuiltInCritterId =
   | 'fairy'
   | 'pixie'
   | 'sprite'
@@ -32,7 +32,11 @@ export type CritterId =
   | 'ghostfreak'
   | 'mew';
 
-export type CritterGenre =
+/** User-imported PixelLab packs use `custom:<slug>`. */
+export type CustomCritterId = `custom:${string}`;
+export type CritterId = BuiltInCritterId | CustomCritterId;
+
+export type BuiltInCritterGenre =
   | 'off'
   | 'fae-princess'
   | 'goblin-priest'
@@ -48,6 +52,8 @@ export type CritterGenre =
   | 'crabacus'
   | 'emerald-wyvern'
   | 'void-walker';
+
+export type CritterGenre = BuiltInCritterGenre | CustomCritterId;
 
 export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'off',
@@ -67,8 +73,15 @@ export const CRITTER_GENRE_IDS: CritterGenre[] = [
   'void-walker',
 ];
 
+export function isCustomCritterGenre(value: unknown): value is CustomCritterId {
+  return typeof value === 'string' && /^custom:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
 export function isCritterGenre(value: unknown): value is CritterGenre {
-  return typeof value === 'string' && (CRITTER_GENRE_IDS as string[]).includes(value);
+  return (
+    (typeof value === 'string' && (CRITTER_GENRE_IDS as string[]).includes(value)) ||
+    isCustomCritterGenre(value)
+  );
 }
 
 export interface CritterSprite {
@@ -753,7 +766,7 @@ const MEW: CritterSprite = {
   frames: [['.']],
 };
 
-export const CRITTERS: Record<CritterId, CritterSprite> = {
+export const CRITTERS: Record<BuiltInCritterId, CritterSprite> = {
   fairy: FAIRY,
   pixie: PIXIE,
   sprite: SPRITE,
@@ -777,6 +790,19 @@ export const CRITTERS: Record<CritterId, CritterSprite> = {
   ghostfreak: GHOSTFREAK,
   mew: MEW,
 };
+
+export function isCritterId(value: unknown): value is CritterId {
+  return (
+    (typeof value === 'string' && Object.prototype.hasOwnProperty.call(CRITTERS, value)) ||
+    isCustomCritterGenre(value)
+  );
+}
+
+/** Built-in lookup, or null for custom ids (resolved via customCritters registry). */
+export function getBuiltInCritter(id: CritterId): CritterSprite | null {
+  if (isCustomCritterGenre(id)) return null;
+  return CRITTERS[id as BuiltInCritterId] ?? null;
+}
 
 export interface CritterGenreInfo {
   id: CritterGenre;
@@ -901,7 +927,29 @@ export function visibleCritterGenres(_unlockedSecrets = true): CritterGenreInfo[
   return CRITTER_GENRES;
 }
 
+/** Unique companion ids from a genre selection (order preserved). */
+export function uniqueCastForSelection(genres: CritterGenre[]): CritterId[] {
+  const out: CritterId[] = [];
+  for (const genre of genres) {
+    if (genre === 'off') continue;
+    const cast = getCritterGenre(genre).cast;
+    for (const id of cast) {
+      if (!out.includes(id)) out.push(id);
+    }
+  }
+  return out;
+}
+
 export function getCritterGenre(id: CritterGenre): CritterGenreInfo {
+  if (isCustomCritterGenre(id)) {
+    return {
+      id,
+      label: id.slice('custom:'.length),
+      description: 'A companion you imported from a PixelLab export folder.',
+      cast: [id],
+      count: 1,
+    };
+  }
   return CRITTER_GENRES.find((g) => g.id === id) ?? CRITTER_GENRES[0]!;
 }
 

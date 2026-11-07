@@ -11,6 +11,16 @@ export type WhatsNewEntry = {
  */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.30',
+    date: '2026-11-07',
+    title: 'Companions page and PixelLab custom uploads',
+    bullets: [
+      'Companions moved out of Settings into their own sidebar page.',
+      'Per-companion size sliders (50%–200%) for selected creatures.',
+      'Upload your own PixelLab.ai export folders — walk/idle roam, with one optional pause flourish.',
+    ],
+  },
+  {
     version: '0.1.29',
     date: '2026-11-07',
     title: 'Ghostfreak scale polish and Goblin free-roam fix',

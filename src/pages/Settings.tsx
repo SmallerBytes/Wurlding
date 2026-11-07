@@ -1,61 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Settings as SettingsIcon,
   Moon,
   Sun,
   Sparkles,
   BookOpen,
-  Ghost,
   ChevronDown,
-  Download,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { WHATS_NEW } from '../data/whatsNew';
-import { CRITTERS, visibleCritterGenres } from '../data/pixelCritters';
-import PixelSpritePreview from '../components/PixelSpritePreview';
 import {
-  CRITTERS_EVENT,
-  MAX_CRITTER_SELECTIONS,
   MOTION_EVENT,
   THEME_EVENT,
+  getStoredCritterScales,
   getStoredCritters,
   getStoredDesktopCompanions,
   getStoredMotion,
   getStoredTheme,
-  normalizeCritterSelection,
-  previewCritters,
   previewMotion,
   previewTheme,
-  sameCritterSelection,
   savePreferences,
-  setDesktopCompanions,
   type AppPreferences,
   type AppTheme,
-  type CritterGenre,
-  type CritterSelection,
   type MotionPref,
 } from '../theme';
-
-const DESKTOP_BACKGROUNDS = [
-  {
-    id: 'forest-stream',
-    title: 'Forest stream clearing',
-    alt: 'Pixel-art forest stream clearing with a winding path, waterfall, and sunbeams',
-    file: 'forest-stream-clearing.png',
-    download: 'wurlding-forest-stream-clearing.png',
-  },
-  {
-    id: 'sunlit-woodland',
-    title: 'Sunlit woodland clearing',
-    alt: 'Pixel-art sunlit woodland clearing with a dirt path, trees, mushrooms, and god rays',
-    file: 'sunlit-woodland-clearing.png',
-    download: 'wurlding-sunlit-woodland-clearing.png',
-  },
-] as const;
-
-function desktopBgUrl(file: string): string {
-  return `${import.meta.env.BASE_URL}desktop-backgrounds/${file}`;
-}
 
 function formatEntryDate(iso: string): string {
   const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
@@ -63,34 +31,41 @@ function formatEntryDate(iso: string): string {
   return new Date(year, month - 1, day).toLocaleDateString();
 }
 
-function readCurrent(): AppPreferences {
+type SettingsDraft = {
+  theme: AppTheme;
+  motion: MotionPref;
+};
+
+function readSettingsDraft(): SettingsDraft {
   return {
     theme: getStoredTheme(),
     motion: getStoredMotion(),
-    critters: getStoredCritters(),
-    desktopCompanions: getStoredDesktopCompanions(),
   };
 }
 
-function samePrefs(a: AppPreferences, b: AppPreferences): boolean {
-  return (
-    a.theme === b.theme &&
-    a.motion === b.motion &&
-    sameCritterSelection(a.critters, b.critters) &&
-    Boolean(a.desktopCompanions) === Boolean(b.desktopCompanions)
-  );
+function sameSettingsDraft(a: SettingsDraft, b: SettingsDraft): boolean {
+  return a.theme === b.theme && a.motion === b.motion;
+}
+
+function fullPreferences(draft: SettingsDraft): AppPreferences {
+  return {
+    theme: draft.theme,
+    motion: draft.motion,
+    critters: getStoredCritters(),
+    desktopCompanions: getStoredDesktopCompanions(),
+    critterScales: getStoredCritterScales(),
+  };
 }
 
 /** Apply a draft to this window only (nothing is written until Save). */
-function previewAll(prefs: AppPreferences): void {
+function previewAll(prefs: SettingsDraft): void {
   previewTheme(prefs.theme);
   previewMotion(prefs.motion);
-  previewCritters(prefs.critters);
 }
 
 export default function Settings() {
-  const [saved, setSaved] = useState<AppPreferences>(() => readCurrent());
-  const [draft, setDraft] = useState<AppPreferences>(() => readCurrent());
+  const [saved, setSaved] = useState<SettingsDraft>(() => readSettingsDraft());
+  const [draft, setDraft] = useState<SettingsDraft>(() => readSettingsDraft());
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const applyingLocal = useRef(false);
@@ -110,7 +85,7 @@ export default function Settings() {
       mountedRef.current = false;
       if (savingRef.current) return;
       // Leaving without saving puts the window back to the last saved look.
-      if (!samePrefs(savedRef.current, draftRef.current)) previewAll(savedRef.current);
+      if (!sameSettingsDraft(savedRef.current, draftRef.current)) previewAll(savedRef.current);
     };
   }, []);
 
@@ -132,20 +107,11 @@ export default function Settings() {
       setSaved((s) => ({ ...s, motion: detail }));
       setSaveState('idle');
     };
-    const onCritters = (e: Event) => {
-      if (applyingLocal.current) return;
-      const detail = normalizeCritterSelection((e as CustomEvent<unknown>).detail);
-      setDraft((d) => ({ ...d, critters: detail }));
-      setSaved((s) => ({ ...s, critters: detail }));
-      setSaveState('idle');
-    };
     window.addEventListener(THEME_EVENT, onTheme);
     window.addEventListener(MOTION_EVENT, onMotion);
-    window.addEventListener(CRITTERS_EVENT, onCritters);
     return () => {
       window.removeEventListener(THEME_EVENT, onTheme);
       window.removeEventListener(MOTION_EVENT, onMotion);
-      window.removeEventListener(CRITTERS_EVENT, onCritters);
     };
   }, []);
 
@@ -167,58 +133,13 @@ export default function Settings() {
     setSaveState('idle');
   };
 
-  const applyCritterSelection = (next: CritterSelection) => {
-    const normalized = normalizeCritterSelection(next);
-    if (sameCritterSelection(normalized, draft.critters)) return;
-    applyingLocal.current = true;
-    previewCritters(normalized);
-    if (normalized.length === 0 && draft.desktopCompanions) {
-      setDesktopCompanions(false);
-    }
-    applyingLocal.current = false;
-    setDraft((d) => ({
-      ...d,
-      critters: normalized,
-      desktopCompanions: normalized.length === 0 ? false : d.desktopCompanions,
-    }));
-    if (normalized.length === 0) {
-      setSaved((s) => ({ ...s, desktopCompanions: false }));
-    }
-    setSaveState('idle');
-  };
-
-  const toggleCritter = (id: CritterGenre) => {
-    if (id === 'off') {
-      applyCritterSelection([]);
-      return;
-    }
-    const selected = new Set(draft.critters);
-    if (selected.has(id)) selected.delete(id);
-    else {
-      if (selected.size >= MAX_CRITTER_SELECTIONS) return;
-      selected.add(id);
-    }
-    applyCritterSelection([...selected]);
-  };
-
-  const toggleDesktopCompanions = () => {
-    if (draft.critters.length === 0 || draft.motion === 'off') return;
-    const next = !draft.desktopCompanions;
-    applyingLocal.current = true;
-    setDesktopCompanions(next);
-    applyingLocal.current = false;
-    setDraft((d) => ({ ...d, desktopCompanions: next }));
-    setSaved((s) => ({ ...s, desktopCompanions: next }));
-    setSaveState('idle');
-  };
-
   const save = async () => {
     if (saveState === 'saving') return;
     const next = draftRef.current;
     savingRef.current = true;
     setSaveState('saving');
     applyingLocal.current = true;
-    const ok = await savePreferences(next);
+    const ok = await savePreferences(fullPreferences(next));
     applyingLocal.current = false;
     savingRef.current = false;
     if (!mountedRef.current) {
@@ -234,7 +155,7 @@ export default function Settings() {
   };
 
   const motionOn = draft.motion === 'on';
-  const dirty = !samePrefs(draft, saved);
+  const dirty = !sameSettingsDraft(draft, saved);
 
   return (
     <div className="relative mx-auto max-w-2xl min-h-full">
@@ -314,7 +235,11 @@ export default function Settings() {
               </h2>
               <p className="text-sm text-mist">
                 Page transitions, drifting motes of light, wiggling icons and other little flourishes.
-                Turn this off for a calmer, perfectly still interface.
+                Turn this off for a calmer, perfectly still interface. Pixel companions live on the{' '}
+                <Link to="/companions" className="text-arcane underline-offset-2 hover:underline">
+                  Companions
+                </Link>{' '}
+                page.
               </p>
             </div>
 
@@ -340,151 +265,23 @@ export default function Settings() {
               ? 'On — Wurlding will sparkle a little. If your system asks for reduced motion this stays off until you enable it here.'
               : 'Off — all decorative motion is disabled, including pixel companions. Functional transitions are kept short.'}
           </p>
-        </section>
-
-        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="critters-heading">
-          <div>
-            <h2 id="critters-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
-              <Ghost className="h-5 w-5 text-fey" aria-hidden />
-              Pixel companions
-            </h2>
-            <p className="text-sm text-mist">
-              Little creatures that wander the window: perching on headings, strolling along
-              the tops of cards, hopping between panels, and circling your work. Select one or
-              more companions — up to {MAX_CRITTER_SELECTIONS} at once.
-              {!motionOn && ' They stay hidden while animations are off.'}
-            </p>
-          </div>
-
-          <div
-            className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
-            role="group"
-            aria-label="Pixel companions"
-          >
-            {visibleCritterGenres().map((genre) => {
-              const selected =
-                genre.id === 'off' ? draft.critters.length === 0 : draft.critters.includes(genre.id);
-              const preview = Array.from(new Set(genre.cast)).slice(0, 3);
-              const atCap =
-                genre.id !== 'off' &&
-                !selected &&
-                draft.critters.length >= MAX_CRITTER_SELECTIONS;
-              return (
-                <button
-                  key={genre.id}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={selected}
-                  aria-disabled={atCap || undefined}
-                  disabled={atCap}
-                  onClick={() => toggleCritter(genre.id)}
-                  className={`flex h-full flex-col gap-2 rounded-lg border p-3 text-left transition ${
-                    selected
-                      ? 'border-arcane/50 bg-arcane/10 ring-1 ring-arcane/30'
-                      : atCap
-                        ? 'cursor-not-allowed border-dusk/40 bg-abyss/30 opacity-50'
-                        : 'border-dusk/70 bg-abyss/50 hover:border-dusk'
-                  }`}
-                >
-                  <span className="flex h-12 items-end gap-2" aria-hidden>
-                    {preview.length === 0 ? (
-                      <span className="text-xs uppercase tracking-[0.2em] text-mist">motes only</span>
-                    ) : (
-                      preview.map((id) => (
-                        <PixelSpritePreview
-                          key={id}
-                          sprite={CRITTERS[id]}
-                          displaySize={48}
-                          animate={selected && motionOn}
-                        />
-                      ))
-                    )}
-                  </span>
-                  <span className="flex flex-1 flex-col">
-                    <span className="block font-medium text-moonlight">{genre.label}</span>
-                    <span className="mt-1 text-sm text-mist">{genre.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
 
           <div className="flex flex-col gap-3 border-t border-dusk/60 pt-4">
-            {draft.critters.length > 0 && motionOn && (
-              <p className="text-sm text-mist">
-                {draft.desktopCompanions
-                  ? 'Companions are on your desktop and stay while Wurlding is open — even minimized.'
-                  : 'Add companions to your desktop so they keep roaming after you minimize Wurlding.'}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center justify-start gap-3">
-              {draft.critters.length > 0 && motionOn && (
-                <button
-                  type="button"
-                  className={draft.desktopCompanions ? 'btn-secondary' : 'btn-primary'}
-                  onClick={toggleDesktopCompanions}
-                >
-                  {draft.desktopCompanions ? 'Remove from screen' : 'Add to screen'}
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => void save()}
-                disabled={!dirty || saveState === 'saving'}
-              >
-                Save preferences
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn-primary w-fit disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => void save()}
+              disabled={!dirty || saveState === 'saving'}
+            >
+              Save preferences
+            </button>
             <p className="text-sm text-mist" role="status">
               {saveState === 'saving' && 'Saving preferences…'}
               {saveState === 'saved' && 'Preferences saved. Wurlding will open with this look next time.'}
               {saveState === 'error' && 'Could not save preferences. Keep this window open and try again.'}
-              {saveState === 'idle' && dirty && 'Save to keep this theme, animation, and companion choice the next time you open Wurlding.'}
-              {saveState === 'idle' && !dirty && 'Saved appearance, animations, and companions are used the next time you open Wurlding.'}
+              {saveState === 'idle' && dirty && 'Save to keep this theme and animation choice the next time you open Wurlding.'}
+              {saveState === 'idle' && !dirty && 'Saved appearance and animations are used the next time you open Wurlding.'}
             </p>
-          </div>
-        </section>
-
-        <section className="card space-y-4 border-dusk/80 bg-shadow/40" aria-labelledby="desktop-bg-heading">
-          <div>
-            <h2 id="desktop-bg-heading" className="section-title mb-1 flex items-center gap-2 font-[Cinzel] text-lg">
-              <ImageIcon className="h-5 w-5 text-fey" aria-hidden />
-              Companion desktop backgrounds
-            </h2>
-            <p className="text-sm text-mist">
-              Pixel clearings you can set as wallpaper so desktop companions have a fitting place to
-              roam.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {DESKTOP_BACKGROUNDS.map((bg) => {
-              const href = desktopBgUrl(bg.file);
-              return (
-                <figure
-                  key={bg.id}
-                  className="flex flex-col gap-3 overflow-hidden rounded-lg border border-dusk/60 bg-abyss/40"
-                >
-                  <img
-                    src={href}
-                    alt={bg.alt}
-                    className="max-h-52 w-full object-cover object-center"
-                    loading="lazy"
-                  />
-                  <figcaption className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
-                    <span className="font-[Cinzel] text-sm font-semibold text-moonlight">{bg.title}</span>
-                    <a
-                      className="btn-secondary inline-flex items-center gap-2"
-                      href={href}
-                      download={bg.download}
-                    >
-                      <Download className="h-4 w-4" aria-hidden />
-                      Download
-                    </a>
-                  </figcaption>
-                </figure>
-              );
-            })}
           </div>
         </section>
 

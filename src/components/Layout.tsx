@@ -5,7 +5,7 @@ import PixelCritters from './PixelCritters';
 import SecretCritterUnlock from './SecretCritterUnlock';
 import {
   Globe, BookOpen, Users, Sword, Bug, Network, GitBranch,
-  ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings,
+  ChevronLeft, ChevronRight, Plus, Home, Map, Shield, Package, Calendar, Menu, Compass, Info, Settings, Ghost,
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import {
@@ -123,6 +123,22 @@ export default function Layout() {
               {!collapsed && <span className="text-sm font-medium">{label}</span>}
             </NavLink>
           ))}
+          <NavLink
+            to="/companions"
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) =>
+              `wz-nav-link flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg transition-all duration-200 ${
+                collapsed ? 'justify-center' : ''
+              } ${
+                isActive
+                  ? 'bg-arcane/15 text-arcane border border-arcane/20'
+                  : 'text-mist hover:text-moonlight hover:bg-shadow'
+              }`
+            }
+          >
+            <Ghost size={20} />
+            {!collapsed && <span className="text-sm font-medium">Companions</span>}
+          </NavLink>
           <NavLink
             to="/settings"
             onClick={() => setMobileOpen(false)}

@@ -1,18 +1,26 @@
 import { API_BASE } from './api';
-import { isCritterGenre, type CritterGenre } from './data/pixelCritters';
+import { isCritterGenre, isCritterId, type CritterGenre, type CritterId } from './data/pixelCritters';
 
 export type AppTheme = 'dark' | 'light';
 export type MotionPref = 'on' | 'off';
-export type { CritterGenre };
+export type { CritterGenre, CritterId };
 /** Selected companion genres. Empty means off. Never includes `'off'`. */
 export type CritterSelection = CritterGenre[];
+/** Per-companion draw size as a percent of the default (100 = unchanged). */
+export type CritterScaleMap = Partial<Record<CritterId, number>>;
 export type AppPreferences = {
   theme: AppTheme;
   motion: MotionPref;
   critters: CritterSelection;
   /** When true, companions also roam a transparent always-on-top desktop overlay. */
   desktopCompanions?: boolean;
+  /** Optional size overrides for individual companions. */
+  critterScales?: CritterScaleMap;
 };
+
+export const MIN_CRITTER_SCALE_PERCENT = 50;
+export const MAX_CRITTER_SCALE_PERCENT = 200;
+export const DEFAULT_CRITTER_SCALE_PERCENT = 100;
 
 /** Soft cap so the window doesn't fill with every cast at once. */
 export const MAX_CRITTER_SELECTIONS = 5;
@@ -63,9 +71,52 @@ export const CRITTERS_STORAGE_KEY = 'wurlding:critters';
 export const CRITTERS_EVENT = 'wurlding:critters';
 export const DESKTOP_COMPANIONS_STORAGE_KEY = 'wurlding:desktop-companions';
 export const DESKTOP_COMPANIONS_EVENT = 'wurlding:desktop-companions';
+export const CRITTER_SCALES_STORAGE_KEY = 'wurlding:critter-scales';
+export const CRITTER_SCALES_EVENT = 'wurlding:critter-scales';
 
 export const DEFAULT_THEME: AppTheme = 'dark';
 export const DEFAULT_CRITTERS: CritterSelection = ['fae-princess'];
+
+export function clampCritterScalePercent(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_CRITTER_SCALE_PERCENT;
+  return Math.min(
+    MAX_CRITTER_SCALE_PERCENT,
+    Math.max(MIN_CRITTER_SCALE_PERCENT, Math.round(value)),
+  );
+}
+
+export function normalizeCritterScales(raw: unknown): CritterScaleMap {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: CritterScaleMap = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isCritterId(key)) continue;
+    const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    if (!Number.isFinite(n)) continue;
+    const percent = clampCritterScalePercent(n);
+    if (percent !== DEFAULT_CRITTER_SCALE_PERCENT) out[key] = percent;
+  }
+  return out;
+}
+
+export function sameCritterScales(a: CritterScaleMap, b: CritterScaleMap): boolean {
+  const aKeys = Object.keys(a) as CritterId[];
+  const bKeys = Object.keys(b) as CritterId[];
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((id) => a[id] === b[id]);
+}
+
+export function serializeCritterScales(scales: CritterScaleMap): string {
+  return JSON.stringify(normalizeCritterScales(scales));
+}
+
+export function getCritterScalePercent(id: CritterId, scales?: CritterScaleMap): number {
+  const map = scales ?? getStoredCritterScales();
+  return clampCritterScalePercent(map[id] ?? DEFAULT_CRITTER_SCALE_PERCENT);
+}
+
+export function getCritterScaleFactor(id: CritterId, scales?: CritterScaleMap): number {
+  return getCritterScalePercent(id, scales) / 100;
+}
 
 export function isAppTheme(value: unknown): value is AppTheme {
   return value === 'dark' || value === 'light';
@@ -207,6 +258,33 @@ export function setDesktopCompanions(enabled: boolean): void {
   }
 }
 
+export function getStoredCritterScales(): CritterScaleMap {
+  try {
+    const raw = localStorage.getItem(CRITTER_SCALES_STORAGE_KEY);
+    if (!raw) return {};
+    return normalizeCritterScales(JSON.parse(raw) as unknown);
+  } catch {
+    return {};
+  }
+}
+
+/** Preview size overrides in this window without writing the saved preference. */
+export function previewCritterScales(scales: CritterScaleMap): void {
+  window.dispatchEvent(
+    new CustomEvent(CRITTER_SCALES_EVENT, { detail: normalizeCritterScales(scales) }),
+  );
+}
+
+export function setCritterScales(scales: CritterScaleMap): void {
+  const normalized = normalizeCritterScales(scales);
+  try {
+    localStorage.setItem(CRITTER_SCALES_STORAGE_KEY, serializeCritterScales(normalized));
+  } catch {
+    // ignore
+  }
+  previewCritterScales(normalized);
+}
+
 /** Preferences stored beside the world data file. Null when the user has never saved. */
 export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
   try {
@@ -218,6 +296,7 @@ export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
         motion?: unknown;
         critters?: unknown;
         desktopCompanions?: unknown;
+        critterScales?: unknown;
       } | null;
     };
     const data = json?.data;
@@ -230,6 +309,7 @@ export async function fetchSavedPreferences(): Promise<AppPreferences | null> {
       // Older preference files predate companions; fall back to the default cast.
       critters: data.critters === undefined ? [...DEFAULT_CRITTERS] : critters,
       desktopCompanions: data.desktopCompanions === true,
+      critterScales: normalizeCritterScales(data.critterScales),
     };
   } catch {
     return null;
@@ -242,7 +322,10 @@ export async function savePreferences(prefs: AppPreferences): Promise<boolean> {
     const res = await fetch(`${API_BASE}/api/preferences`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(prefs),
+      body: JSON.stringify({
+        ...prefs,
+        critterScales: normalizeCritterScales(prefs.critterScales),
+      }),
     });
     if (!res.ok) return false;
   } catch {
@@ -254,6 +337,7 @@ export async function savePreferences(prefs: AppPreferences): Promise<boolean> {
   if (typeof prefs.desktopCompanions === 'boolean') {
     setDesktopCompanions(prefs.desktopCompanions);
   }
+  setCritterScales(prefs.critterScales ?? {});
   try {
     window.wurldingDesktop?.preferencesSaved(prefs);
   } catch {

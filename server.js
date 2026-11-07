@@ -8,6 +8,15 @@ import archiver from 'archiver';
 import unzipper from 'unzipper';
 import crypto from 'crypto';
 import { nanoid } from 'nanoid';
+import {
+  MAX_CUSTOM_CRITTERS,
+  deleteCustomCritter,
+  importPixelLabPack,
+  isCustomCritterId,
+  listCustomCritters,
+  readCustomCritter,
+  sanitizeSlug,
+} from './server/customCrittersImport.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +50,7 @@ const DATA_FILE = path.join(DATA_DIR, 'wurlding-data.json');
 const PREFS_FILE = path.join(DATA_DIR, 'preferences.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const IMAGES_DIR = path.join(DATA_DIR, 'images');
+const CUSTOM_CRITTERS_DIR = path.join(DATA_DIR, 'custom-critters');
 const PORT = Number.parseInt(process.env.PORT || '', 10) || 3001;
 const MAX_BACKUPS = 50;
 const EXPORT_FORMAT_VERSION = 1;
@@ -50,9 +60,16 @@ const IMPORT_TOKEN_TTL_MS = 15 * 60 * 1000;
 const importSessions = new Map();
 
 function ensureDirs() {
-  for (const dir of [DATA_DIR, BACKUP_DIR, IMAGES_DIR]) {
+  for (const dir of [DATA_DIR, BACKUP_DIR, IMAGES_DIR, CUSTOM_CRITTERS_DIR]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+function isAllowedCritterGenre(value) {
+  return (
+    (typeof value === 'string' && CRITTER_GENRES.includes(value) && value !== 'off') ||
+    isCustomCritterId(value)
+  );
 }
 
 ensureDirs();
@@ -68,17 +85,42 @@ if (!fs.existsSync(DATA_FILE) && fs.existsSync(LEGACY_DATA_FILE)) {
 }
 
 const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
+const CRITTER_IDS = [
+  'fairy', 'pixie', 'sprite', 'goblin', 'wyvern', 'dragon', 'butterfly', 'beetle', 'snake',
+  'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker', 'goblin-priest', 'fae-princess',
+  'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew',
+];
 const MAX_CRITTER_SELECTIONS = 5;
+const MIN_CRITTER_SCALE_PERCENT = 50;
+const MAX_CRITTER_SCALE_PERCENT = 200;
+const DEFAULT_CRITTER_SCALE_PERCENT = 100;
+
+function normalizeCritterScales(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!CRITTER_IDS.includes(key) && !isCustomCritterId(key)) continue;
+    const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    if (!Number.isFinite(n)) continue;
+    const percent = Math.min(
+      MAX_CRITTER_SCALE_PERCENT,
+      Math.max(MIN_CRITTER_SCALE_PERCENT, Math.round(n)),
+    );
+    if (percent !== DEFAULT_CRITTER_SCALE_PERCENT) out[key] = percent;
+  }
+  return out;
+}
 
 function normalizeCritters(raw) {
   if (raw == null || raw === 'off') return 'off';
   if (raw === 'fae') return 'fae-princess';
+  if (typeof raw === 'string' && isAllowedCritterGenre(raw)) return raw;
   if (typeof raw === 'string' && CRITTER_GENRES.includes(raw)) return raw;
   if (Array.isArray(raw)) {
     const list = [];
     for (const item of raw) {
       const g = item === 'fae' ? 'fae-princess' : item;
-      if (!CRITTER_GENRES.includes(g) || g === 'off') continue;
+      if (!isAllowedCritterGenre(g)) continue;
       if (!list.includes(g)) list.push(g);
       if (list.length >= MAX_CRITTER_SELECTIONS) break;
     }
@@ -100,6 +142,8 @@ function readPreferences() {
     const critters = normalizeCritters(raw?.critters === 'fae' ? 'fae-princess' : raw?.critters);
     if (critters != null) prefs.critters = critters;
     if (raw?.desktopCompanions === true) prefs.desktopCompanions = true;
+    const scales = normalizeCritterScales(raw?.critterScales);
+    if (Object.keys(scales).length) prefs.critterScales = scales;
     return prefs;
   } catch {
     console.error('[WURLDING] Failed to read preferences file');
@@ -483,6 +527,76 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/api/images', express.static(IMAGES_DIR));
+/** Normalized custom companion PNG trees (not the JSON API). */
+app.use('/api/custom-critter-files', express.static(CUSTOM_CRITTERS_DIR));
+
+const customCritterUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 2500 },
+  fileFilter: (_req, file, cb) => {
+    const name = file.originalname || '';
+    if (/\.png$/i.test(name) || /metadata\.json$/i.test(name)) cb(null, true);
+    else cb(null, false);
+  },
+});
+
+app.get('/api/custom-critters', (_req, res) => {
+  try {
+    res.json({ ok: true, data: listCustomCritters(CUSTOM_CRITTERS_DIR) });
+  } catch (err) {
+    console.error('[WURLDING] List custom critters error:', err);
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.get('/api/custom-critters/:slug/manifest', (req, res) => {
+  const manifest = readCustomCritter(CUSTOM_CRITTERS_DIR, req.params.slug);
+  if (!manifest) return res.status(404).json({ ok: false, error: 'Custom companion not found' });
+  res.json({ ok: true, data: manifest });
+});
+
+app.post('/api/custom-critters', customCritterUpload.array('files', 2500), (req, res) => {
+  try {
+    const uploaded = Array.isArray(req.files) ? req.files : [];
+    if (!uploaded.length) {
+      return res.status(400).json({ ok: false, error: 'No files uploaded. Choose a PixelLab export folder.' });
+    }
+    const relPaths = typeof req.body?.paths === 'string' ? JSON.parse(req.body.paths) : req.body?.paths;
+    if (!Array.isArray(relPaths) || relPaths.length !== uploaded.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Upload must include a paths[] entry matching each file (relative paths inside the folder).',
+      });
+    }
+    const files = uploaded.map((file, i) => ({
+      relativePath: String(relPaths[i] || file.originalname || ''),
+      buffer: file.buffer,
+    }));
+    const manifest = importPixelLabPack(CUSTOM_CRITTERS_DIR, {
+      files,
+      displayName: typeof req.body?.name === 'string' ? req.body.name : undefined,
+      folderName: typeof req.body?.folderName === 'string' ? req.body.folderName : undefined,
+    });
+    console.log(`[WURLDING] Custom companion imported: ${manifest.slug}`);
+    res.json({ ok: true, data: manifest });
+  } catch (err) {
+    console.error('[WURLDING] Custom companion import error:', err);
+    res.status(400).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.delete('/api/custom-critters/:slug', (req, res) => {
+  try {
+    const slug = sanitizeSlug(req.params.slug);
+    const ok = deleteCustomCritter(CUSTOM_CRITTERS_DIR, slug);
+    if (!ok) return res.status(404).json({ ok: false, error: 'Custom companion not found' });
+    console.log(`[WURLDING] Custom companion deleted: ${slug}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[WURLDING] Delete custom companion error:', err);
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
 
 app.get('/api/preferences', (_req, res) => {
   res.json({ ok: true, data: readPreferences() });
@@ -499,7 +613,7 @@ app.put('/api/preferences', (req, res) => {
   if (crittersRaw !== undefined && critters == null) {
     return res.status(400).json({
       ok: false,
-      error: `Expected critters to be one of ${CRITTER_GENRES.join(', ')}, or an array of those (except off).`,
+      error: `Expected critters to be one of ${CRITTER_GENRES.join(', ')}, custom:<slug>, or an array of those (except off).`,
     });
   }
   try {
@@ -507,6 +621,9 @@ app.put('/api/preferences', (req, res) => {
     if (critters !== undefined) prefs.critters = critters;
     if (req.body?.desktopCompanions === true) prefs.desktopCompanions = true;
     else if (req.body?.desktopCompanions === false) prefs.desktopCompanions = false;
+    if (req.body?.critterScales !== undefined) {
+      prefs.critterScales = normalizeCritterScales(req.body.critterScales);
+    }
     writePreferences(prefs);
     res.json({ ok: true, data: prefs });
   } catch (err) {
@@ -803,6 +920,7 @@ const httpServer = app.listen(PORT, () => {
   console.log(`[WURLDING] Data server running on http://localhost:${PORT}`);
   console.log(`[WURLDING] Data file: ${DATA_FILE}`);
   console.log(`[WURLDING] Images:    ${IMAGES_DIR}`);
+  console.log(`[WURLDING] Customs:   ${CUSTOM_CRITTERS_DIR} (max ${MAX_CUSTOM_CRITTERS})`);
   console.log(`[WURLDING] Backups:   ${BACKUP_DIR}`);
   const data = readData();
   if (data) {

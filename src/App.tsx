@@ -18,6 +18,7 @@ import FamilyTree from './pages/FamilyTree';
 import MapCreator from './pages/MapCreator';
 import WorldWeb from './pages/WorldWeb';
 import About from './pages/About';
+import Companions from './pages/Companions';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="family" element={<FamilyTree />} />
           <Route path="map" element={<MapCreator />} />
           <Route path="web" element={<WorldWeb />} />
+          <Route path="companions" element={<Companions />} />
           <Route path="settings" element={<Settings />} />
           <Route path="about" element={<About />} />
         </Route>

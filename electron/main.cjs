@@ -35,19 +35,56 @@ let currentMotion = 'on';
 let currentCritters = 'fae-princess';
 /** Companions roam a desktop overlay even when the main window is minimized. */
 let currentDesktopCompanions = false;
+let currentCritterScales = {};
 
 const CRITTER_GENRES = ['off', 'fae-princess', 'goblin-priest', 'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew', 'wilds', 'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker'];
 const MAX_CRITTER_SELECTIONS = 5;
+const CRITTER_IDS = [
+  'fairy', 'pixie', 'sprite', 'goblin', 'wyvern', 'dragon', 'butterfly', 'beetle', 'snake',
+  'alligator-bear', 'crabacus', 'emerald-wyvern', 'void-walker', 'goblin-priest', 'fae-princess',
+  'ragnok', 'necromage', 'golem', 'victfur', 'iron-giant', 'ghostfreak', 'mew',
+];
+const MIN_CRITTER_SCALE_PERCENT = 50;
+const MAX_CRITTER_SCALE_PERCENT = 200;
+const DEFAULT_CRITTER_SCALE_PERCENT = 100;
+
+function normalizeCritterScales(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!CRITTER_IDS.includes(key) && !isCustomCritterId(key)) continue;
+    const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    if (!Number.isFinite(n)) continue;
+    const percent = Math.min(
+      MAX_CRITTER_SCALE_PERCENT,
+      Math.max(MIN_CRITTER_SCALE_PERCENT, Math.round(n)),
+    );
+    if (percent !== DEFAULT_CRITTER_SCALE_PERCENT) out[key] = percent;
+  }
+  return out;
+}
+
+function isCustomCritterId(value) {
+  return typeof value === 'string' && /^custom:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
+function isAllowedCritterGenre(value) {
+  return (
+    (typeof value === 'string' && CRITTER_GENRES.includes(value) && value !== 'off') ||
+    isCustomCritterId(value)
+  );
+}
 
 function normalizeCritters(raw) {
   if (raw == null || raw === 'off') return 'off';
   if (raw === 'fae') return 'fae-princess';
+  if (typeof raw === 'string' && isAllowedCritterGenre(raw)) return raw;
   if (typeof raw === 'string' && CRITTER_GENRES.includes(raw)) return raw;
   if (Array.isArray(raw)) {
     const list = [];
     for (const item of raw) {
       const g = item === 'fae' ? 'fae-princess' : item;
-      if (!CRITTER_GENRES.includes(g) || g === 'off') continue;
+      if (!isAllowedCritterGenre(g)) continue;
       if (!list.includes(g)) list.push(g);
       if (list.length >= MAX_CRITTER_SELECTIONS) break;
     }
@@ -105,7 +142,8 @@ function readDiskPreferences() {
     if (!theme || !motion) return null;
     const critters = normalizeCritters(raw?.critters) ?? currentCritters;
     const desktopCompanions = raw?.desktopCompanions === true;
-    return { theme, motion, critters, desktopCompanions };
+    const critterScales = normalizeCritterScales(raw?.critterScales);
+    return { theme, motion, critters, desktopCompanions, critterScales };
   } catch {
     return null;
   }
@@ -123,6 +161,7 @@ function currentPreferences() {
     motion: currentMotion,
     critters: currentCritters,
     desktopCompanions: currentDesktopCompanions,
+    critterScales: currentCritterScales,
   };
 }
 
@@ -135,17 +174,19 @@ function isAppWindow(win) {
   );
 }
 
-function prefsScript(theme, motion, critters, desktopCompanions) {
+function prefsScript(theme, motion, critters, desktopCompanions, critterScales) {
   const safeCritters = normalizeCritters(critters) ?? 'fae-princess';
   const storageCritters = crittersStorageValue(safeCritters);
   const eventCritters = safeCritters === 'off' ? [] : Array.isArray(safeCritters) ? safeCritters : [safeCritters];
   const desk = desktopCompanions === true;
+  const scales = normalizeCritterScales(critterScales);
   return `(function () {
     try {
       localStorage.setItem('wurlding:theme', ${JSON.stringify(theme)});
       localStorage.setItem('wurlding:motion', ${JSON.stringify(motion)});
       localStorage.setItem('wurlding:critters', ${JSON.stringify(storageCritters)});
       localStorage.setItem('wurlding:desktop-companions', ${JSON.stringify(desk ? '1' : '0')});
+      localStorage.setItem('wurlding:critter-scales', ${JSON.stringify(JSON.stringify(scales))});
       document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});
       document.documentElement.style.colorScheme = ${JSON.stringify(theme)};
       document.documentElement.setAttribute('data-motion', ${JSON.stringify(motion)});
@@ -153,6 +194,7 @@ function prefsScript(theme, motion, critters, desktopCompanions) {
       window.dispatchEvent(new CustomEvent('wurlding:motion', { detail: ${JSON.stringify(motion)} }));
       window.dispatchEvent(new CustomEvent('wurlding:critters', { detail: ${JSON.stringify(eventCritters)} }));
       window.dispatchEvent(new CustomEvent('wurlding:desktop-companions', { detail: ${desk} }));
+      window.dispatchEvent(new CustomEvent('wurlding:critter-scales', { detail: ${JSON.stringify(scales)} }));
     } catch (e) {}
   })();`;
 }
@@ -178,7 +220,13 @@ function syncCompanionOverlayPrefs() {
   if (!companionOverlayWindow || companionOverlayWindow.isDestroyed()) return;
   companionOverlayWindow.webContents
     .executeJavaScript(
-      prefsScript(currentAppTheme, currentMotion, currentCritters, currentDesktopCompanions),
+      prefsScript(
+        currentAppTheme,
+        currentMotion,
+        currentCritters,
+        currentDesktopCompanions,
+        currentCritterScales,
+      ),
     )
     .catch(() => {});
 }
@@ -308,6 +356,7 @@ function pushPrefsToAllWindows() {
     currentMotion,
     currentCritters,
     currentDesktopCompanions,
+    currentCritterScales,
   );
   const bg = themeBackgroundColor(currentAppTheme);
   for (const win of BrowserWindow.getAllWindows()) {
@@ -360,6 +409,7 @@ function applySavedPreferencesFromDisk() {
   currentMotion = disk.motion;
   currentCritters = disk.critters;
   currentDesktopCompanions = disk.desktopCompanions === true;
+  currentCritterScales = normalizeCritterScales(disk.critterScales);
 }
 
 function syncThemeFromRenderer(win) {
@@ -469,13 +519,20 @@ function revealWithSavedPrefs(win) {
   const apply = disk
     ? win.webContents
         .executeJavaScript(
-          prefsScript(disk.theme, disk.motion, disk.critters, disk.desktopCompanions === true),
+          prefsScript(
+            disk.theme,
+            disk.motion,
+            disk.critters,
+            disk.desktopCompanions === true,
+            disk.critterScales,
+          ),
         )
         .then(() => {
           currentAppTheme = disk.theme;
           currentMotion = disk.motion;
           currentCritters = disk.critters;
           currentDesktopCompanions = disk.desktopCompanions === true;
+          currentCritterScales = normalizeCritterScales(disk.critterScales);
           try {
             win.setBackgroundColor(themeBackgroundColor(disk.theme));
           } catch {
@@ -857,6 +914,9 @@ ipcMain.on('preferences-saved', (_event, prefs) => {
   currentCritters = critters;
   if (typeof prefs?.desktopCompanions === 'boolean') {
     currentDesktopCompanions = prefs.desktopCompanions;
+  }
+  if (prefs?.critterScales !== undefined) {
+    currentCritterScales = normalizeCritterScales(prefs.critterScales);
   }
   if (!crittersActive(currentCritters) || currentMotion === 'off') {
     currentDesktopCompanions = false;

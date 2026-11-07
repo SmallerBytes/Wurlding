@@ -8,6 +8,7 @@ interface WurldingDesktopBridge {
     motion: 'on' | 'off';
     critters: string | string[];
     desktopCompanions?: boolean;
+    critterScales?: Partial<Record<string, number>>;
   }) => void;
   setDesktopCompanions?: (enabled: boolean) => void;
   getDesktopCompanions?: () => Promise<boolean>;
